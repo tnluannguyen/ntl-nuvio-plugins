@@ -7,7 +7,8 @@ function getHeaders() {
   return {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
     'Referer': 'https://anineko.to/',
-    'X-Requested-With': 'XMLHttpRequest'
+    'X-Requested-With': 'XMLHttpRequest',
+    'Accept': '*/*'
   };
 }
 
@@ -20,7 +21,7 @@ async function fetchText(url, options = {}, timeout = 10000) {
     if (!response.ok) return null;
     return await response.text();
   } catch (e) {
-    console.log(`[${PROVIDER_NAME}] Lỗi tải: ${e.message}`);
+    console.log(`[${PROVIDER_NAME}] Lỗi tải: ${url} - ${e.message}`);
     return null;
   }
 }
@@ -61,46 +62,49 @@ async function getStreams(tmdbId, mediaType, season, episode, meta) {
   const fullTitle = tmdbData.name || tmdbData.title;
   const searchTitle = fullTitle.split(':')[0].trim();
   
-  console.log(`[${PROVIDER_NAME}] Đang tìm kiếm: ${searchTitle} (Season ${season})`);
+  console.log(`[${PROVIDER_NAME}] Đang tìm kiếm: ${searchTitle}`);
   const searchUrl = `${BASE_URL}/ajax/search?q=${encodeURIComponent(searchTitle)}`;
   const searchHtml = await fetchText(searchUrl, { headers });
 
   if (!searchHtml) return [];
 
-  const cards = searchHtml.split('class="nv-card"').slice(1);
+  const matches = [...searchHtml.matchAll(/href="\/watch\/([^"]+)"[^>]*>[\s\S]*?class="nv-card-title">([^<]+)</gi)];
   let bestSlug = null;
 
-  for (const card of cards) {
-    const slugMatch = card.match(/href="\/watch\/([^"]+)"/);
-    const titleMatch = card.match(/class="nv-card-title">([^<]+)</);
-    
-    if (slugMatch && titleMatch) {
-      const slug = slugMatch[1];
-      const title = titleMatch[1].toLowerCase();
+  if (matches.length > 0) {
+    for (const match of matches) {
+      const slug = match[1];
+      const title = match[2].toLowerCase();
       
-      if (isSeries && season > 1) {
-        if (title.includes(`season ${season}`) || slug.includes(`season-${season}`)) {
-          bestSlug = slug;
-          break;
-        }
-      } else if (isSeries && season === 1) {
-        if (!title.includes('season') || title.includes('season 1')) {
-          bestSlug = slug;
-          break;
+      if (isSeries) {
+        if (season > 1) {
+          if (title.includes(`season ${season}`) || title.includes(`part ${season}`) || slug.includes(`season-${season}`)) {
+            bestSlug = slug;
+            break;
+          }
+        } else {
+          if (!title.includes('season') && !title.includes('part')) {
+            bestSlug = slug;
+            break;
+          }
+          if (title.includes('season 1') || title.includes('part 1')) {
+            bestSlug = slug;
+            break;
+          }
         }
       } else {
         bestSlug = slug;
         break;
       }
     }
+    if (!bestSlug) bestSlug = matches[0][1];
   }
 
-  if (!bestSlug && cards.length > 0) {
-    const firstMatch = cards[0].match(/href="\/watch\/([^"]+)"/);
-    if (firstMatch) bestSlug = firstMatch[1];
+  if (!bestSlug) {
+    console.log(`[${PROVIDER_NAME}] Không tìm thấy slug phù hợp.`);
+    return [];
   }
 
-  if (!bestSlug) return [];
   console.log(`[${PROVIDER_NAME}] Đã chọn slug: ${bestSlug}`);
 
   const infoUrl = `${BASE_URL}/watch/${bestSlug}`;
@@ -108,11 +112,15 @@ async function getStreams(tmdbId, mediaType, season, episode, meta) {
   if (!infoHtml) return [];
 
   const idMatch = infoHtml.match(/data-content-id="(\d+)"/);
-  if (!idMatch) return [];
+  if (!idMatch) {
+    console.log(`[${PROVIDER_NAME}] Không tìm thấy ID nội bộ.`);
+    return [];
+  }
 
   const internalId = idMatch[1];
-  const epTag = isSeries ? `${fullTitle} (Phần ${season})\nTập ${String(episode).padStart(2, '0')}` : fullTitle;
+  console.log(`[${PROVIDER_NAME}] Đã xác định ID: ${internalId}`);
 
+  const epTag = isSeries ? `${fullTitle} (Phần ${season})\nTập ${String(episode).padStart(2, '0')}` : fullTitle;
   const streams = [];
   const servers = ['kite', 'dio'];
   const types = ['sub', 'dub', 'raw'];
