@@ -1,7 +1,7 @@
 const PROVIDER_NAME = 'Animetsu';
 const TMDB_API_KEY = '439c478a771f35c05022f9feabcca01c';
 const BASE_URL = 'https://animetsu.vu/v2/api';
-const PROXY_URL = 'https://proxy.animetsu.vu/proxy'; // Đã cập nhật Proxy chính chủ
+const PROXY_URL = 'https://proxy.animetsu.vu/proxy';
 
 const MOBILE_UAS = [
   'Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36',
