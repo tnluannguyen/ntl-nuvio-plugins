@@ -1,400 +1,536 @@
-/**
- * AniNeko Provider for Nuvio Plugins
- * Scrapes from anineko.to
- */
+// VidnestAnime Scraper for Nuvio Local Scrapers
+// React Native compatible version - Promise-based approach only
+// Extracts anime streaming links using AniList IDs for Vidnest anime servers with AES-GCM decryption
 
-var PROVIDER_NAME = "AniNeko";
-var BASE_URL = "https://anineko.to";
-var TMDB_KEY = "1c29a5198ee1854bd5eb45dbe8d17d92";
+// VidnestAnime Configuration
+const VIDNEST_BASE_URL = 'https://backend.vidnest.fun';
+const PASSPHRASE = 'A7kP9mQeXU2BWcD4fRZV+Sg8yN0/M5tLbC1HJQwYe6o=';
 
-var DEFAULT_HEADERS = {
-  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36",
-  "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-  "Accept-Language": "en-US,en;q=0.9",
-  "Referer": BASE_URL + "/"
+// TMDB API Configuration
+const TMDB_API_KEY = '439c478a771f35c05022f9feabcca01c';
+const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
+
+// Anime Servers Configuration
+const ANIME_SERVERS = {
+    'hindi': {
+        url: (id, ep) => `${VIDNEST_BASE_URL}/animeworld/${id}/${ep}/server/my%20server`,
+        language: 'Hindi',
+        needsDecryption: true
+    },
+    'satoru': {
+        url: (id, ep) => `${VIDNEST_BASE_URL}/satoru/${id}/${ep}`,
+        language: 'Original',
+        needsDecryption: true
+    },
+    'miko': {
+        url: (id, ep, lang) => `${VIDNEST_BASE_URL}/aniwave/${id}/${ep}/${lang}/wave`,
+        language: 'Original',
+        needsDecryption: true,
+        supportsSubDub: true
+    },
+    'pahe': {
+        url: (id, ep, lang) => `${VIDNEST_BASE_URL}/aniwave/${id}/${ep}/${lang}/pahe`,
+        language: 'Original',
+        needsDecryption: true,
+        supportsSubDub: true
+    },
+    'anya': {
+        url: (id, ep, lang) => `${VIDNEST_BASE_URL}/aniwave/${id}/${ep}/${lang}/anya`,
+        language: 'Original',
+        needsDecryption: true,
+        supportsSubDub: true
+    }
 };
 
-// ===== FETCH HELPERS =====
+// Working headers for VidnestAnime API
+const WORKING_HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36',
+    'Accept': 'application/json, text/plain, */*',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Accept-Encoding': 'gzip, deflate, br',
+    'Referer': 'https://vidnest.fun/',
+    'Origin': 'https://vidnest.fun',
+    'DNT': '1'
+};
 
-function fetchText(url, options) {
-  return fetch(url, Object.assign({ headers: DEFAULT_HEADERS }, options || {}))
-    .then(function(res) {
-      if (!res.ok) throw new Error("HTTP " + res.status);
-      return res.text();
-    });
+// React Native-safe Base64 utilities (reused from vidnest.js)
+const BASE64_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+
+function base64ToBytes(base64) {
+    if (!base64) return new Uint8Array(0);
+    
+    // Remove padding
+    let input = String(base64).replace(/=+$/, '');
+    let output = '';
+    let bc = 0, bs, buffer, idx = 0;
+    
+    while ((buffer = input.charAt(idx++))) {
+        buffer = BASE64_CHARS.indexOf(buffer);
+        if (~buffer) {
+            bs = bc % 4 ? bs * 64 + buffer : buffer;
+            if (bc++ % 4) {
+                output += String.fromCharCode(255 & (bs >> ((-2 * bc) & 6)));
+            }
+        }
+    }
+    
+    // Convert string to bytes
+    const bytes = new Uint8Array(output.length);
+    for (let i = 0; i < output.length; i++) {
+        bytes[i] = output.charCodeAt(i);
+    }
+    return bytes;
 }
 
-// ===== TMDB =====
+function bytesToBase64(bytes) {
+    if (!bytes || bytes.length === 0) return '';
+    
+    let output = '';
+    let i = 0;
+    const len = bytes.length;
+    
+    while (i < len) {
+        const a = bytes[i++];
+        const b = i < len ? bytes[i++] : 0;
+        const c = i < len ? bytes[i++] : 0;
+        
+        const bitmap = (a << 16) | (b << 8) | c;
+        
+        output += BASE64_CHARS.charAt((bitmap >> 18) & 63);
+        output += BASE64_CHARS.charAt((bitmap >> 12) & 63);
+        output += i - 2 < len ? BASE64_CHARS.charAt((bitmap >> 6) & 63) : '=';
+        output += i - 1 < len ? BASE64_CHARS.charAt(bitmap & 63) : '=';
+    }
+    
+    return output;
+}
 
-function getTMDBTitle(tmdbId, mediaType) {
-  var type = mediaType === "movie" ? "movie" : "tv";
-  var url = "https://api.themoviedb.org/3/" + type + "/" + tmdbId +
-            "?api_key=" + TMDB_KEY;
+// Node.js compatible atob function
+function atob(str) {
+    return base64ToBytes(str).map(byte => String.fromCharCode(byte)).join('');
+}
 
-  return fetch(url)
-    .then(function(r) { return r.json(); })
-    .then(function(data) {
-      return {
-        title: data.name || data.title || "",
-        originalTitle: data.original_name || data.original_title || "",
-        year: (data.first_air_date || data.release_date || "").split("-")[0]
-      };
+// AES-GCM Decryption using server (React Native compatible)
+function decryptAesGcm(encryptedB64, passphraseB64) {
+    console.log('[VidnestAnime] Starting AES-GCM decryption via server...');
+    
+    return fetch('https://aesdec.nuvioapp.space/decrypt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            encryptedData: encryptedB64,
+            passphrase: passphraseB64
+        })
     })
-    .catch(function() { return { title: "", originalTitle: "", year: "" }; });
-}
-
-// ===== SEARCH & MATCH =====
-
-function searchAniNeko(keyword) {
-  var url = BASE_URL + "/browser?keyword=" + encodeURIComponent(keyword);
-  return fetchText(url).then(function(html) {
-    var results = [];
-    var regex = /<article class="nv-anime-card nv-browse-card">[\s\S]*?<a[^>]+href="([^"]+)"[^>]*>[\s\S]*?<img[^>]+src="([^"]+)"[^>]+alt="([^"]+)"/g;
-    var match;
-    while ((match = regex.exec(html)) !== null) {
-      results.push({
-        title: match[3].trim(),
-        image: match[2].trim(),
-        href: BASE_URL + match[1].trim()
-      });
-    }
-    return results;
-  });
-}
-
-function normalizeTitle(str) {
-  return String(str || "").toLowerCase()
-    .replace(/[^a-z0-9\s]/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function titleScore(a, b) {
-  var na = normalizeTitle(a);
-  var nb = normalizeTitle(b);
-  if (na === nb) return 100;
-  if (na.indexOf(nb) !== -1 || nb.indexOf(na) !== -1) return 80;
-  // Word overlap
-  var wa = na.split(" ");
-  var wb = nb.split(" ");
-  var matched = wa.filter(function(w) { return w.length > 2 && wb.indexOf(w) !== -1; }).length;
-  return Math.round((matched / Math.max(wa.length, wb.length)) * 60);
-}
-
-function findBestMatch(results, title, originalTitle) {
-  var best = null;
-  var bestScore = 0;
-  results.forEach(function(r) {
-    var s = Math.max(titleScore(r.title, title), titleScore(r.title, originalTitle));
-    if (s > bestScore) { bestScore = s; best = r; }
-  });
-  return bestScore >= 40 ? best : null;
-}
-
-// ===== EPISODE EXTRACTION =====
-
-function extractEpisodes(showUrl) {
-  return fetchText(showUrl).then(function(html) {
-    var episodes = [];
-    var regex = /<article class="nv-info-episode-item">[\s\S]*?<a[^>]+href="([^"]+)"[^>]*>[\s\S]*?<strong>Episode (\d+)<\/strong>/g;
-    var match;
-    while ((match = regex.exec(html)) !== null) {
-      episodes.push({
-        href: BASE_URL + match[1].trim(),
-        number: parseInt(match[2], 10)
-      });
-    }
-    console.log("[AniNeko] Found " + episodes.length + " episodes");
-    return episodes;
-  });
-}
-
-// ===== SERVER EXTRACTORS =====
-
-// HD-1 / HD-2 → vibeplayer.site master.m3u8
-function extractVibeplayer(videoUrl) {
-  var idMatch = videoUrl.match(/vibeplayer\.site\/([a-z0-9]+)/);
-  if (!idMatch) return Promise.resolve(null);
-  return Promise.resolve("https://vibeplayer.site/public/stream/" + idMatch[1] + "/master.m3u8");
-}
-
-// StreamHG / Earnvids → p.a.c.k.e.r obfuscated JS
-function extractPacker(videoUrl) {
-  return fetchText(videoUrl).then(function(html) {
-    var scriptMatch = html.match(/<script[^>]*>\s*(eval\(function\(p,a,c,k,e,d[\s\S]*?)<\/script>/);
-    if (!scriptMatch) return null;
-
-    var unpacked = unpack(scriptMatch[1]);
-
-    var hlsMatch = unpacked.match(/"(https:\/\/[^"]+master\.m3u8[^"]*)"/);
-    if (hlsMatch) return hlsMatch[1];
-
-    var fileMatch = unpacked.match(/file\s*:\s*"([^"]+)"/);
-    if (fileMatch) return fileMatch[1];
-
-    return null;
-  });
-}
-
-// Doodstream extractor
-function extractDoodstream(videoUrl) {
-  return fetchText(videoUrl).then(function(html) {
-    return doodstreamExtractor(html, videoUrl);
-  });
-}
-
-function doodstreamExtractor(html, url) {
-  try {
-    var streamDomain = url.match(/https:\/\/(.*?)\//)[1];
-    var md5Match = html.match(/'\/pass_md5\/(.*?)',/);
-    if (!md5Match) return Promise.resolve(null);
-
-    var md5Path = md5Match[1];
-    var token = md5Path.substring(md5Path.lastIndexOf("/") + 1);
-    var expiryTimestamp = new Date().valueOf();
-    var random = randomStr(10);
-
-    return fetchText("https://" + streamDomain + "/pass_md5/" + md5Path, {
-      headers: Object.assign({}, DEFAULT_HEADERS, { "Referer": url })
-    }).then(function(responseData) {
-      return responseData + random + "?token=" + token + "&expiry=" + expiryTimestamp;
+    .then(response => response.json())
+    .then(data => {
+        if (data.error) throw new Error(data.error);
+        console.log('[VidnestAnime] Server decryption successful');
+        return data.decrypted;
+    })
+    .catch(error => {
+        console.error(`[VidnestAnime] Server decryption failed: ${error.message}`);
+        throw error;
     });
-  } catch (e) {
-    return Promise.resolve(null);
-  }
 }
 
-function randomStr(length) {
-  var chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-  var result = "";
-  for (var i = 0; i < length; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return result;
-}
 
-// ===== STREAM EXTRACTION FROM EPISODE PAGE =====
 
-function extractStreamsFromEpisode(episodeUrl) {
-  return fetchText(episodeUrl).then(function(html) {
-    var serverTasks = [];
-    var subtitleUrl = "";
-
-    var regex = /<button[^>]+data-video="([^"]+)"[^>]*>\s*([^<\s]+)\s*<span>([^<]+)<\/span>/g;
-    var match;
-
-    while ((match = regex.exec(html)) !== null) {
-      var videoUrl   = match[1];
-      var serverName = match[2].trim();
-      var label      = match[3].trim();
-
-      if (label === "Sort Sub") label = "Soft Sub";
-
-      // Grab first subtitle URL found
-      if (!subtitleUrl) {
-        var subMatch = videoUrl.match(/(?:sub|caption_1|c1_file)=([^&"]+)/);
-        if (subMatch) subtitleUrl = decodeURIComponent(subMatch[1]);
-      }
-
-      // Capture loop vars for async closure
-      (function(vUrl, sName, lbl) {
-        var priority = 99;
-        var extractor;
-
-        if (sName === "HD-1" || sName === "HD-2") {
-          priority = sName === "HD-1" ? 1 : 2;
-          extractor = extractVibeplayer(vUrl);
-        } else if (sName === "StreamHG" || sName === "Earnvids") {
-          priority = sName === "StreamHG" ? 3 : 4;
-          extractor = extractPacker(vUrl);
-        } else if (sName === "Doodstream") {
-          priority = 5;
-          extractor = extractDoodstream(vUrl);
-        } else {
-          return; // Unknown server — skip
+// Helper function to make HTTP requests
+function makeRequest(url, options = {}) {
+    const defaultHeaders = { ...WORKING_HEADERS };
+    
+    return fetch(url, {
+        method: options.method || 'GET',
+        headers: { ...defaultHeaders, ...options.headers },
+        ...options
+    }).then(function(response) {
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
+        return response;
+    }).catch(function(error) {
+        console.error(`[VidnestAnime] Request failed for ${url}: ${error.message}`);
+        throw error;
+    });
+}
 
-        serverTasks.push(
-          extractor
-            .then(function(streamUrl) {
-              if (!streamUrl) return null;
-              return { serverName: sName, label: lbl, priority: priority, streamUrl: streamUrl };
-            })
-            .catch(function(err) {
-              console.error("[AniNeko] Server " + sName + " failed: " + err.message);
-              return null;
-            })
+// Get TMDB details to extract title and year
+function getTMDBDetails(tmdbId, mediaType) {
+    const endpoint = mediaType === 'tv' ? 'tv' : 'movie';
+    const url = `${TMDB_BASE_URL}/${endpoint}/${tmdbId}?api_key=${TMDB_API_KEY}`;
+    
+    return makeRequest(url)
+        .then(function(response) {
+            return response.json();
+        })
+        .then(function(data) {
+            const title = mediaType === 'tv' ? data.name : data.title;
+            const releaseDate = mediaType === 'tv' ? data.first_air_date : data.release_date;
+            const year = releaseDate ? parseInt(releaseDate.split('-')[0]) : null;
+            
+            return {
+                title: title,
+                year: year
+            };
+        });
+}
+
+// Map TMDB ID to AniList ID using AniList GraphQL API
+function mapTMDBToAniList(tmdbId, title, year) {
+    console.log(`[VidnestAnime] Mapping TMDB ${tmdbId} to AniList...`);
+    
+    // Try searching by title and year
+    const query = `
+        query ($search: String, $year: Int) {
+            Media(search: $search, seasonYear: $year, type: ANIME, format_in: [TV, TV_SHORT, MOVIE, OVA, ONA, SPECIAL]) {
+                id
+                title {
+                    romaji
+                    english
+                    native
+                }
+                seasonYear
+            }
+        }
+    `;
+    
+    return fetch('https://graphql.anilist.co', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+        },
+        body: JSON.stringify({
+            query: query,
+            variables: { 
+                search: title, 
+                year: year 
+            }
+        })
+    })
+    .then(function(response) {
+        return response.json();
+    })
+    .then(function(data) {
+        if (data.data && data.data.Media) {
+            const anilistId = data.data.Media.id;
+            console.log(`[VidnestAnime] Mapped to AniList ID: ${anilistId} (${data.data.Media.title.english || data.data.Media.title.romaji})`);
+            return anilistId;
+        }
+        throw new Error(`No AniList mapping found for "${title}" (${year})`);
+    });
+}
+
+// Get episode count for previous seasons to calculate absolute episode number
+function getTMDBSeasonEpisodeCounts(tmdbId, targetSeason) {
+    console.log(`[VidnestAnime] Fetching season info for TMDB ${tmdbId}, seasons 1-${targetSeason}`);
+    
+    // Fetch all seasons up to the target season
+    const seasonPromises = [];
+    for (let s = 1; s < targetSeason; s++) {
+        const url = `${TMDB_BASE_URL}/tv/${tmdbId}/season/${s}?api_key=${TMDB_API_KEY}`;
+        seasonPromises.push(
+            makeRequest(url)
+                .then(function(response) {
+                    return response.json();
+                })
+                .then(function(data) {
+                    return data.episodes ? data.episodes.length : 0;
+                })
+                .catch(function(error) {
+                    console.error(`[VidnestAnime] Failed to fetch season ${s}: ${error.message}`);
+                    return 0; // Return 0 if season fetch fails
+                })
         );
-      })(videoUrl, serverName, label);
     }
-
-    return Promise.all(serverTasks).then(function(results) {
-      var valid = results.filter(function(s) { return s !== null; });
-      valid.sort(function(a, b) { return a.priority - b.priority; });
-
-      var serverCounts = {};
-      var streams = [];
-
-      valid.forEach(function(s) {
-        var baseName = s.serverName.replace("-", " ");
-        var baseTitle = (s.serverName === "HD-1" || s.serverName === "HD-2")
-          ? "[HD] " + baseName + " " + s.label
-          : baseName + " " + s.label;
-
-        var finalTitle = baseTitle;
-        if (serverCounts[baseTitle]) {
-          serverCounts[baseTitle]++;
-          finalTitle = baseTitle + " " + serverCounts[baseTitle];
-        } else {
-          serverCounts[baseTitle] = 1;
-        }
-
-        streams.push({ serverTitle: finalTitle, serverName: s.serverName, label: s.label, streamUrl: s.streamUrl });
-      });
-
-      return { streams: streams, subtitleUrl: subtitleUrl };
-    });
-  });
+    
+    return Promise.all(seasonPromises)
+        .then(function(episodeCounts) {
+            const totalPreviousEpisodes = episodeCounts.reduce((sum, count) => sum + count, 0);
+            console.log(`[VidnestAnime] Previous seasons episode counts: ${episodeCounts.join(', ')} = ${totalPreviousEpisodes} total`);
+            return totalPreviousEpisodes;
+        });
 }
 
-// ===== P.A.C.K.E.R UNPACKER =====
+// Get anime metadata from ani.zip API
+function getAnimeMetadata(anilistId, episodeNum) {
+    console.log(`[VidnestAnime] Fetching metadata for AniList ID: ${anilistId}, Episode: ${episodeNum}`);
+    
+    return makeRequest(`https://api.ani.zip/mappings?anilist_id=${anilistId}`)
+        .then(function(response) {
+            return response.json();
+        })
+        .then(function(data) {
+            const episode = data.episodes?.[String(episodeNum)] || null;
+            
+            return {
+                anilistId: anilistId, // Store the AniList ID
+                title: data.title?.english || data.titles?.en || `Anime ID: ${anilistId}`,
+                episodeTitle: episode?.title || null,
+                poster: episode?.image || data.images?.find(i => i.coverType === 'Poster')?.url || '',
+                year: data.year || null
+            };
+        })
+        .catch(function(error) {
+            console.error(`[VidnestAnime] Failed to fetch anime metadata: ${error.message}`);
+            // Return fallback metadata
+            return {
+                anilistId: anilistId, // Store the AniList ID
+                title: `Anime ID: ${anilistId}`,
+                episodeTitle: null,
+                poster: '',
+                year: null
+            };
+        });
+}
 
-function Unbaser(base) {
-  this.ALPHABET = {
-    62: "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ",
-    95: " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"
-  };
-  this.dictionary = {};
-  this.base = base;
+// Fetch streams from a single anime server
+function fetchFromAnimeServer(serverName, serverConfig, anilistId, episodeNum, subDub) {
+    console.log(`[VidnestAnime] Fetching from ${serverName}...`);
+    
+    // Build URL based on server config
+    const url = serverConfig.supportsSubDub 
+        ? serverConfig.url(anilistId, episodeNum, subDub || 'sub')
+        : serverConfig.url(anilistId, episodeNum);
+    
+    console.log(`[VidnestAnime] ${serverName} API URL: ${url}`);
+    
+    return makeRequest(url)
+        .then(function(response) {
+            return response.text();
+        })
+        .then(function(responseText) {
+            console.log(`[VidnestAnime] ${serverName} response length: ${responseText.length} characters`);
+            
+            // Try to parse as JSON first
+            try {
+                const data = JSON.parse(responseText);
+                
+                // Check if response contains encrypted data
+                if (serverConfig.needsDecryption && data.encrypted && data.data) {
+                    console.log(`[VidnestAnime] ${serverName}: Detected encrypted response, decrypting...`);
+                    
+                    return decryptAesGcm(data.data, PASSPHRASE)
+                        .then(function(decryptedText) {
+                            console.log(`[VidnestAnime] ${serverName}: Decryption successful`);
+                            
+                            try {
+                                const decryptedData = JSON.parse(decryptedText);
+                                return processAnimeResponse(decryptedData, serverName, serverConfig, subDub);
+                            } catch (parseError) {
+                                console.error(`[VidnestAnime] ${serverName}: JSON parse error after decryption: ${parseError.message}`);
+                                return [];
+                            }
+                        });
+                } else {
+                    // Process non-encrypted response
+                    return processAnimeResponse(data, serverName, serverConfig, subDub);
+                }
+            } catch (parseError) {
+                console.error(`[VidnestAnime] ${serverName}: Invalid JSON response: ${parseError.message}`);
+                return [];
+            }
+        })
+        .catch(function(error) {
+            console.error(`[VidnestAnime] ${serverName} error: ${error.message}`);
+            return [];
+        });
+}
 
-  if (36 < base && base < 62) {
-    this.ALPHABET[base] = this.ALPHABET[base] || this.ALPHABET[62].substr(0, base);
-  }
-
-  if (2 <= base && base <= 36) {
-    this.unbase = function(value) { return parseInt(value, base); };
-  } else {
-    var self = this;
+// Process anime server response
+function processAnimeResponse(data, serverName, serverConfig, subDub) {
+    const streams = [];
+    
     try {
-      self.ALPHABET[base].split("").forEach(function(cipher, index) {
-        self.dictionary[cipher] = index;
-      });
-    } catch (er) {
-      throw new Error("Unsupported base encoding.");
-    }
-    this.unbase = function(value) {
-      var ret = 0;
-      value.split("").reverse().forEach(function(cipher, index) {
-        ret += Math.pow(self.base, index) * self.dictionary[cipher];
-      });
-      return ret;
-    };
-  }
-}
-
-function unpack(source) {
-  var juicers = [
-    /}\('(.*)', *(\d+|\[\]), *(\d+), *'(.*)'\.split\('\|'\), *(\d+), *(.*)\)\)/,
-    /}\('(.*)', *(\d+|\[\]), *(\d+), *'(.*)'\.split\('\|'\)/
-  ];
-
-  var args = null;
-  for (var i = 0; i < juicers.length; i++) {
-    args = juicers[i].exec(source);
-    if (args) break;
-  }
-  if (!args) throw new Error("Could not make sense of p.a.c.k.e.r data");
-
-  var payload = args[1];
-  var radix   = parseInt(args[2]);
-  var count   = parseInt(args[3]);
-  var symtab  = args[4].split("|");
-
-  if (count !== symtab.length) throw new Error("Malformed p.a.c.k.e.r. symtab.");
-
-  var unbase = new Unbaser(radix);
-
-  return payload.replace(/\b\w+\b/g, function(word) {
-    var decoded = radix === 1
-      ? symtab[parseInt(word)]
-      : symtab[unbase.unbase(word)];
-    return decoded || word;
-  });
-}
-
-// ===== MAIN =====
-
-function getStreams(tmdbId, mediaType, season, episode) {
-  var ep = episode || 1;
-
-  console.log("[AniNeko] tmdbId=" + tmdbId + " S" + (season || 1) + "E" + ep);
-
-  return getTMDBTitle(tmdbId, mediaType).then(function(info) {
-    if (!info.title) {
-      throw new Error("Could not resolve title from TMDB");
-    }
-
-    console.log("[AniNeko] Searching: " + info.title);
-
-    return searchAniNeko(info.title).then(function(results) {
-      // If no results, try original title
-      if (results.length === 0 && info.originalTitle && info.originalTitle !== info.title) {
-        return searchAniNeko(info.originalTitle).then(function(r2) {
-          return { results: r2, info: info };
+        console.log(`[VidnestAnime] Processing response from ${serverName}`);
+        
+        // Handle different response formats
+        const sources = data.sources || data.streams || [];
+        const subtitles = data.subtitles || [];
+        const intro = data.intro || null;
+        const outro = data.outro || null;
+        
+        if (!Array.isArray(sources) || sources.length === 0) {
+            console.log(`[VidnestAnime] ${serverName}: No sources/streams array found`);
+            return streams;
+        }
+        
+        // Determine language based on subDub parameter and server config
+        let language = serverConfig.language;
+        if (serverConfig.supportsSubDub && subDub) {
+            if (subDub === 'dub') {
+                language = 'Dub';
+            } else if (subDub === 'sub') {
+                language = 'Sub';
+            }
+        }
+        
+        // Process each source
+        sources.forEach((source, index) => {
+            if (!source) return;
+            
+            // Extract video URL from various possible fields
+            const videoUrl = source.file || source.url || source.src || source.link;
+            
+            if (!videoUrl) {
+                console.log(`[VidnestAnime] ${serverName}: Source ${index} has no video URL`);
+                return;
+            }
+            
+            // Process subtitles
+            const processedSubtitles = subtitles.map(sub => ({
+                file: sub.file || sub.url,
+                kind: sub.kind || 'subtitles',
+                label: sub.label || sub.lang || 'Unknown',
+                default: sub.default || false
+            }));
+            
+            // Use source-specific headers for miko server (requires Referer), default headers for others
+            const streamHeaders = (serverName === 'miko' && source.headers) ? source.headers : WORKING_HEADERS;
+            
+            streams.push({
+                name: `VidnestAnime ${serverName.charAt(0).toUpperCase() + serverName.slice(1)} [${language}] - Adaptive`,
+                url: videoUrl,
+                quality: 'Adaptive',
+                subtitles: processedSubtitles,
+                intro: intro,
+                outro: outro,
+                headers: streamHeaders,
+                provider: 'vidnest-anime'
+            });
+            
+            console.log(`[VidnestAnime] ${serverName}: Added ${language} stream with ${processedSubtitles.length} subtitles`);
+            console.log(`[VidnestAnime] ${serverName}: Stream URL: ${videoUrl}`);
+            
+            // Log complete stream object for testing
+            console.log(`[VidnestAnime] ${serverName}: Complete Stream Object:`, JSON.stringify({
+                name: `VidnestAnime ${serverName.charAt(0).toUpperCase() + serverName.slice(1)} [${language}] - Adaptive`,
+                url: videoUrl,
+                quality: 'Adaptive',
+                subtitles: processedSubtitles,
+                intro: intro,
+                outro: outro,
+                headers: streamHeaders,
+                provider: 'vidnest-anime'
+            }, null, 2));
         });
-      }
-      return { results: results, info: info };
-    });
-  }).then(function(data) {
-    var results = data.results;
-    var info    = data.info;
-
-    if (results.length === 0) {
-      throw new Error("No search results found for: " + info.title);
+        
+    } catch (error) {
+        console.error(`[VidnestAnime] Error processing ${serverName} response: ${error.message}`);
     }
-
-    var match = findBestMatch(results, info.title, info.originalTitle);
-    if (!match) {
-      console.log("[AniNeko] No strong match, using first result: " + results[0].title);
-      match = results[0];
-    }
-
-    console.log("[AniNeko] Matched: " + match.title);
-
-    return extractEpisodes(match.href).then(function(episodes) {
-      var targetEp = episodes.find(function(e) { return e.number === ep; });
-
-      if (!targetEp) {
-        throw new Error("Episode " + ep + " not found (show has " + episodes.length + " episodes)");
-      }
-
-      console.log("[AniNeko] Extracting streams from: " + targetEp.href);
-
-      return extractStreamsFromEpisode(targetEp.href).then(function(result) {
-        console.log("[AniNeko] Got " + result.streams.length + " stream(s)");
-
-        var streamTitle = info.title + " E" + ep;
-        if (info.year) streamTitle += " (" + info.year + ")";
-
-        return result.streams.map(function(s) {
-          return {
-            name: PROVIDER_NAME + " [" + s.serverName + "] " + s.label + " - HD",
-            title: s.serverName + " (" + s.label + ") 1080p",
-            url: s.streamUrl,
-            headers: {
-              "User-Agent": DEFAULT_HEADERS["User-Agent"],
-              "Referer": BASE_URL + "/"
-            },
-            subtitles: result.subtitleUrl ? [{ url: result.subtitleUrl, lang: "English" }] : []
-          };
-        });
-      });
-    });
-  }).catch(function(err) {
-    console.error("[AniNeko] Error: " + err.message);
-    return [];
-  });
+    
+    return streams;
 }
 
-// Export the main function
-module.exports = { getStreams: getStreams };
+// Main function to extract anime streaming links for Nuvio
+function getStreams(tmdbId, mediaType, seasonNum, episodeNum) {
+    console.log(`[VidnestAnime] Starting extraction for TMDB ID: ${tmdbId}, Type: ${mediaType}, S${seasonNum}E${episodeNum}`);
+    
+    return new Promise(function(resolve, reject) {
+        // Step 1: Get TMDB details
+        getTMDBDetails(tmdbId, mediaType)
+            .then(function(tmdbInfo) {
+                console.log(`[VidnestAnime] TMDB: "${tmdbInfo.title}" (${tmdbInfo.year})`);
+                
+                // Step 2: Map to AniList ID
+                return mapTMDBToAniList(tmdbId, tmdbInfo.title, tmdbInfo.year);
+            })
+            .then(function(anilistId) {
+                // Step 3: Calculate absolute episode number for TV shows
+                const season = seasonNum || 1;
+                const episode = episodeNum || 1;
+                
+                if (mediaType === 'tv' && season > 1) {
+                    // For seasons > 1, calculate absolute episode number
+                    return getTMDBSeasonEpisodeCounts(tmdbId, season)
+                        .then(function(previousEpisodesCount) {
+                            const absoluteEpisode = previousEpisodesCount + episode;
+                            console.log(`[VidnestAnime] Converted S${season}E${episode} → Absolute Episode ${absoluteEpisode}`);
+                            return { anilistId: anilistId, absoluteEpisode: absoluteEpisode };
+                        });
+                } else {
+                    // Season 1 or movie: episode number is already absolute
+                    return { anilistId: anilistId, absoluteEpisode: episode };
+                }
+            })
+            .then(function(data) {
+                // Step 4: Fetch anime metadata from ani.zip
+                return getAnimeMetadata(data.anilistId, data.absoluteEpisode)
+                    .then(function(metadata) {
+                        metadata.anilistId = data.anilistId;
+                        metadata.absoluteEpisode = data.absoluteEpisode;
+                        return metadata;
+                    });
+            })
+            .then(function(metadata) {
+                console.log(`[VidnestAnime] Anime: "${metadata.title}" - Episode ${metadata.absoluteEpisode}`);
+                
+                // Step 5: Process all servers in parallel - fetch both SUB and DUB
+                const serverPromises = [];
+                
+                Object.entries(ANIME_SERVERS).forEach(function([serverName, serverConfig]) {
+                    if (serverConfig.supportsSubDub) {
+                        serverPromises.push(fetchFromAnimeServer(serverName, serverConfig, metadata.anilistId, metadata.absoluteEpisode, 'sub'));
+                        serverPromises.push(fetchFromAnimeServer(serverName, serverConfig, metadata.anilistId, metadata.absoluteEpisode, 'dub'));
+                    } else {
+                        serverPromises.push(fetchFromAnimeServer(serverName, serverConfig, metadata.anilistId, metadata.absoluteEpisode, 'sub'));
+                    }
+                });
+                
+                return Promise.all(serverPromises)
+                    .then(function(results) {
+                        // Combine all streams
+                        const allStreams = [];
+                        results.forEach(function(streams) {
+                            allStreams.push(...streams);
+                        });
+                        
+                        // Add metadata to streams
+                        allStreams.forEach(function(stream) {
+                            stream.title = metadata.episodeTitle 
+                                ? `${metadata.title} - ${metadata.episodeTitle}`
+                                : `${metadata.title} - Episode ${metadata.absoluteEpisode}`;
+                            stream.poster = metadata.poster;
+                        });
+                        
+                        // Remove duplicates
+                        const uniqueStreams = [];
+                        const seenUrls = new Set();
+                        allStreams.forEach(function(stream) {
+                            if (!seenUrls.has(stream.url)) {
+                                seenUrls.add(stream.url);
+                                uniqueStreams.push(stream);
+                            }
+                        });
+                        
+                        // Sort streams
+                        const sortedStreams = uniqueStreams.sort(function(a, b) {
+                            const getPriority = function(stream) {
+                                const name = stream.name.toLowerCase();
+                                if (name.includes('satoru') && name.includes('original')) return 1;
+                                if (name.includes('hindi')) return 2;
+                                if (name.includes('[sub]')) return 3;
+                                if (name.includes('[dub]')) return 4;
+                                return 5;
+                            };
+                            return getPriority(a) - getPriority(b);
+                        });
+                        
+                        console.log(`[VidnestAnime] Total streams found: ${sortedStreams.length}`);
+                        resolve(sortedStreams);
+                    });
+            })
+            .catch(function(error) {
+                console.error(`[VidnestAnime] Error: ${error.message}`);
+                resolve([]); // Return empty array on error
+            });
+    });
+}
+
+// Export for React Native compatibility
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = { getStreams };
+} else {
+    global.getStreams = getStreams;
+}
