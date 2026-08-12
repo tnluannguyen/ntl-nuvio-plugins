@@ -1,36 +1,31 @@
-const PROVIDER_NAME = 'Animetsu';
+const PROVIDER_NAME = 'AniNeko';
 const TMDB_API_KEY = '439c478a771f35c05022f9feabcca01c';
-const BASE_URL = 'https://animetsu.vu/api/v2'; // Đổi vị trí api/v2
+const BASE_URL = 'https://anineko.to';
 const PROXY_URL = 'https://swiftstream.top/proxy';
 
 const MOBILE_UAS = [
-  'Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36',
-  'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1'
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
 ];
 
-function getHeaders(customUa = null) {
-  const ua = customUa || MOBILE_UAS[Math.floor(Math.random() * MOBILE_UAS.length)];
+function getHeaders() {
   return {
-    'User-Agent': ua,
-    'Referer': 'https://animetsu.vu/',
-    'Origin': 'https://animetsu.vu/',
-    'Accept-Language': 'en-US,en;q=0.9'
+    'User-Agent': MOBILE_UAS[0],
+    'Referer': 'https://anineko.to/',
+    'X-Requested-With': 'XMLHttpRequest',
+    'Accept': '*/*'
   };
 }
 
-async function fetchJson(url, options = {}, timeout = 12000) {
+async function fetchJson(url, options = {}, timeout = 10000) {
   try {
     const controller = new AbortController();
     const id = setTimeout(() => controller.abort(), timeout);
     const response = await fetch(url, { ...options, signal: controller.signal });
     clearTimeout(id);
-    if (!response.ok) {
-      console.log(`[${PROVIDER_NAME}] HTTP ${response.status} tại: ${url}`);
-      return null;
-    }
+    if (!response.ok) return null;
     return await response.json();
   } catch (e) {
-    console.log(`[${PROVIDER_NAME}] Lỗi Fetch: ${e.message}`);
+    console.log(`[${PROVIDER_NAME}] Lỗi kết nối: ${e.message}`);
     return null;
   }
 }
@@ -52,15 +47,12 @@ async function getAbsoluteEpisode(tmdbId, season, episode) {
   return episode;
 }
 
-async function makeStream(serverName, epTag, type, url, quality, ua) {
-  const headers = getHeaders(ua);
-  const isM3u8 = url.includes('.m3u8') || !url.includes('.mp4');
-  const finalUrl = isM3u8 ? (url.includes('#ext=') ? url : `${url}#ext=.m3u8`) : url;
-
+async function makeStream(serverName, epTag, type, url, quality) {
+  const headers = { 'User-Agent': MOBILE_UAS[0], 'Referer': 'https://anineko.to/' };
   return {
     name: `NTL Global`,
     title: `${epTag}\n🌸 ${PROVIDER_NAME} - ${serverName} | 📺 ${quality} | 🗣️ ${type.toUpperCase()}`,
-    url: finalUrl,
+    url: url,
     resLabel: quality,
     source: `${PROVIDER_NAME} (${serverName})`,
     headers: headers,
@@ -72,11 +64,10 @@ async function makeStream(serverName, epTag, type, url, quality, ua) {
 }
 
 async function getStreams(tmdbId, mediaType, season, episode, meta) {
-  const ua = MOBILE_UAS[0];
-  const headers = getHeaders(ua);
+  const headers = getHeaders();
   const isSeries = mediaType === 'tv' || mediaType === 'series';
   
-  // 1. Lấy thông tin TMDB để có tên phim chuẩn
+  // 1. Lấy tên phim từ TMDB
   const tmdbUrl = `https://api.themoviedb.org/3/${isSeries ? 'tv' : 'movie'}/${tmdbId}?api_key=${TMDB_API_KEY}`;
   const tmdbData = await fetchJson(tmdbUrl);
   if (!tmdbData) return [];
@@ -84,25 +75,17 @@ async function getStreams(tmdbId, mediaType, season, episode, meta) {
   const fullTitle = tmdbData.name || tmdbData.title;
   const searchTitle = fullTitle.split(':')[0].trim();
   
-  // 2. Tìm kiếm trên Animetsu (Thử nghiệm 2 loại endpoint để tránh 404)
-  let searchData = null;
-  const searchPaths = [
-    `${BASE_URL}/search?query=`,
-    `https://animetsu.vu/v2/api/search?query=`
-  ];
-
-  for (const path of searchPaths) {
-    console.log(`[${PROVIDER_NAME}] Đang thử tìm kiếm tại: ${path}${encodeURIComponent(searchTitle)}`);
-    searchData = await fetchJson(`${path}${encodeURIComponent(searchTitle)}`, { headers });
-    if (searchData && searchData.results && searchData.results.length > 0) break;
-  }
+  // 2. Tìm kiếm bằng AJAX endpoint của AniNeko
+  console.log(`[${PROVIDER_NAME}] Đang tìm kiếm: ${searchTitle}`);
+  const searchUrl = `${BASE_URL}/ajax/search?q=${encodeURIComponent(searchTitle)}`;
+  const searchData = await fetchJson(searchUrl, { headers });
 
   if (!searchData || !searchData.results || searchData.results.length === 0) {
-    console.log(`[${PROVIDER_NAME}] Không tìm thấy phim trên hệ thống.`);
+    console.log(`[${PROVIDER_NAME}] Không tìm thấy kết quả.`);
     return [];
   }
 
-  // 3. Khớp phim thông minh sử dụng ID từ DB (anilistId)
+  // 3. Khớp phim (Ưu tiên anilistId từ DB)
   let matchedAnime = null;
   const targetAniId = meta?.anilistId;
 
@@ -112,15 +95,12 @@ async function getStreams(tmdbId, mediaType, season, episode, meta) {
       aniRegex.test(r.cover_image?.large || '') || 
       aniRegex.test(r.banner || '')
     );
-    if (matchedAnime) console.log(`[${PROVIDER_NAME}] Đã khớp phim qua AniList ID: ${targetAniId}`);
   }
 
-  if (!matchedAnime) {
-    matchedAnime = searchData.results[0];
-    console.log(`[${PROVIDER_NAME}] Không khớp được ID, chọn kết quả đầu tiên: ${matchedAnime.id}`);
-  }
+  if (!matchedAnime) matchedAnime = searchData.results[0];
+  console.log(`[${PROVIDER_NAME}] Đã khớp: ${matchedAnime.id}`);
 
-  // 4. Tính toán tập phim và lấy link
+  // 4. Lấy link stream
   const targetEp = isSeries ? await getAbsoluteEpisode(tmdbId, season, episode) : 1;
   const epTag = isSeries ? `${fullTitle} (Phần ${season})\nTập ${String(episode).padStart(2, '0')}` : fullTitle;
 
@@ -130,8 +110,8 @@ async function getStreams(tmdbId, mediaType, season, episode, meta) {
 
   for (const srv of servers) {
     for (const type of types) {
-      // Endpoint lấy link stream (oppai)
-      const apiStreamUrl = `https://animetsu.vu/api/v2/anime/oppai/${matchedAnime.id}/${targetEp}?server=${srv}&source_type=${type}`;
+      // Sử dụng API v2 của AniNeko
+      const apiStreamUrl = `${BASE_URL}/api/v2/anime/oppai/${matchedAnime.id}/${targetEp}?server=${srv}&source_type=${type}`;
       const streamData = await fetchJson(apiStreamUrl, { headers });
       
       if (streamData && streamData.sources) {
@@ -142,8 +122,7 @@ async function getStreams(tmdbId, mediaType, season, episode, meta) {
               epTag,
               type,
               PROXY_URL + source.url,
-              source.quality || '1080p',
-              ua
+              source.quality || '1080p'
             );
             streams.push(stream);
           }
@@ -152,7 +131,7 @@ async function getStreams(tmdbId, mediaType, season, episode, meta) {
     }
   }
 
-  console.log(`[${PROVIDER_NAME}] Trả về ${streams.length} nguồn phát.`);
+  console.log(`[${PROVIDER_NAME}] Hoàn tất. Tìm thấy ${streams.length} nguồn.`);
   return streams;
 }
 
