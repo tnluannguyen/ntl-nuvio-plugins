@@ -156,7 +156,7 @@ function extractStreamsFromEpisode(episodeUrl) {
 
     while ((match = regex.exec(html)) !== null) {
       foundServers++;
-      var videoUrl = match[1];
+      var videoUrl = match[1].replace(/=English/gi, '=Japan');
       var serverName = match[2].trim();
       var label = match[3].trim();
 
