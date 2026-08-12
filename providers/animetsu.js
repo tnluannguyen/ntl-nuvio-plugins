@@ -31,6 +31,16 @@ async function fetchJson(url, options = {}, timeout = 8000) {
   return res && res.ok ? await res.json() : null;
 }
 
+async function checkLinkAlive(url) {
+  try {
+    const res = await fetchWithTimeout(url, {
+      method: 'GET',
+      headers: { 'User-Agent': DEFAULT_HEADERS['User-Agent'], 'Referer': PLAYER_REFERER }
+    }, 4000);
+    return res && res.status >= 200 && res.status < 400;
+  } catch (e) { return false; }
+}
+
 function Unbaser(base) {
   this.ALPHABET = {
     62: '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ',
@@ -96,7 +106,6 @@ async function getStreams(tmdbId, mediaType, season, episode, meta) {
   const fullTitle = tmdbData.name || tmdbData.title;
   const searchTitle = fullTitle.split(':')[0].trim();
   
-  console.log(`[${PROVIDER_NAME}] Tìm kiếm: ${searchTitle} (S${season})`);
   const searchUrl = `${BASE_URL}/browser?keyword=${encodeURIComponent(searchTitle)}`;
   const searchHtml = await fetchText(searchUrl, { headers: DEFAULT_HEADERS });
   if (!searchHtml) return [];
@@ -125,37 +134,36 @@ async function getStreams(tmdbId, mediaType, season, episode, meta) {
   if (!epHtml) return [];
 
   const serverMatches = [...epHtml.matchAll(/<button[^>]+data-video="([^"]+)"[^>]*>\s*([^<\s]+)\s*<span>([^<]+)<\/span>/g)];
-  const tasks = serverMatches.map(async (match) => {
+  const softSubServers = serverMatches.filter(m => m[3].trim() === 'Sort Sub' || m[3].trim() === 'Soft Sub');
+
+  for (const match of softSubServers) {
     const videoUrl = match[1];
     const serverName = match[2].trim();
-    const label = match[3].trim();
     let streamUrl = null;
 
-    try {
-      if (serverName.includes('HD')) {
-        streamUrl = await extractVibeplayer(videoUrl);
-      } else if (serverName === 'StreamHG' || serverName === 'Earnvids') {
-        streamUrl = await extractPacker(videoUrl);
-      }
-      
-      if (streamUrl) {
+    if (serverName.includes('HD')) {
+      streamUrl = await extractVibeplayer(videoUrl);
+    } else if (serverName === 'StreamHG' || serverName === 'Earnvids') {
+      streamUrl = await extractPacker(videoUrl);
+    }
+
+    if (streamUrl) {
+      const isAlive = await checkLinkAlive(streamUrl);
+      if (isAlive) {
         const headers = { 'User-Agent': DEFAULT_HEADERS['User-Agent'], 'Referer': PLAYER_REFERER };
-        return {
+        return [{
           name: `NTL Global`,
-          title: `${fullTitle} (S${season}E${episode})\n🌸 ${serverName} | 📺 1080p | 🗣️ ${label.toUpperCase()}`,
+          title: `${fullTitle} (S${season}E${episode})\n🌸 ${serverName} | 📺 1080p | 🗣️ SOFT SUB`,
           url: streamUrl,
           resLabel: '1080p',
           source: `${PROVIDER_NAME} (${serverName})`,
           behaviorHints: { proxyHeaders: { request: headers }, notWebReady: true }
-        };
+        }];
       }
-    } catch (e) { return null; }
-    return null;
-  });
+    }
+  }
 
-  const results = (await Promise.all(tasks)).filter(Boolean);
-  console.log(`[${PROVIDER_NAME}] Hoàn tất. Trả về ${results.length} nguồn.`);
-  return results;
+  return [];
 }
 
 module.exports = { getStreams };
