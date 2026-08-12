@@ -1,1 +1,403 @@
-var __async=(_0x3426ad,_0x2dc7d9,_0x5ba433)=>{return new Promise((_0x359235,_0x5638a9)=>{var _0x22fdc9=_0x1a19d7=>{try{_0x3b8987(_0x5ba433['next'](_0x1a19d7));}catch(_0x1372e5){_0x5638a9(_0x1372e5);}},_0x1d709a=_0xa1c8e2=>{try{_0x3b8987(_0x5ba433['throw'](_0xa1c8e2));}catch(_0x31396c){_0x5638a9(_0x31396c);}},_0x3b8987=_0x5063bb=>_0x5063bb['done']?_0x359235(_0x5063bb['value']):Promise['resolve'](_0x5063bb['value'])['then'](_0x22fdc9,_0x1d709a);_0x3b8987((_0x5ba433=_0x5ba433['apply'](_0x3426ad,_0x2dc7d9))['next']());});},PROVIDER_NAME='AnikotoTV',TMDB_API_KEY='439c478a771f35c05022f9feabcca01c',TVDB_API_KEY='777140fb-de92-440a-aec2-95eb51e2d7ab',MOBILE_UAS=['Mozilla/5.0\x20(Linux;\x20Android\x2014;\x20Pixel\x208\x20Pro)\x20AppleWebKit/537.36\x20(KHTML,\x20like\x20Gecko)\x20Chrome/124.0.0.0\x20Mobile\x20Safari/537.36','Mozilla/5.0\x20(Linux;\x20Android\x2013;\x20SM-S918B)\x20AppleWebKit/537.36\x20(KHTML,\x20like\x20Gecko)\x20Chrome/116.0.0.0\x20Mobile\x20Safari/537.36','Mozilla/5.0\x20(Linux;\x20Android\x2012;\x20Pixel\x206)\x20AppleWebKit/537.36\x20(KHTML,\x20like\x20Gecko)\x20Chrome/115.0.0.0\x20Mobile\x20Safari/537.36','Mozilla/5.0\x20(iPhone;\x20CPU\x20iPhone\x20OS\x2017_0\x20like\x20Mac\x20OS\x20X)\x20AppleWebKit/605.1.15\x20(KHTML,\x20like\x20Gecko)\x20Version/17.0\x20Mobile/15E148\x20Safari/604.1'];function getHeaders(_0x800cb6){var _0x3d1a76=MOBILE_UAS[Math['floor'](Math['random']()*MOBILE_UAS['length'])],_0x14db7d={'User-Agent':_0x3d1a76,'Accept-Language':'en-US,en;q=0.9'};if(_0x800cb6)for(var _0x1d97a2 in _0x800cb6){_0x14db7d[_0x1d97a2]=_0x800cb6[_0x1d97a2];}return _0x14db7d;}var _tvdbToken=null;function getTvdbToken(){return __async(this,null,function*(){if(_tvdbToken)return _tvdbToken;try{var _0x35708b=yield fetch('https://api4.thetvdb.com/v4/login',{'method':'POST','headers':{'Content-Type':'application/json'},'body':JSON['stringify']({'apikey':TVDB_API_KEY})});if(_0x35708b['ok']){var _0x1ff109=yield _0x35708b['json']();if(_0x1ff109&&_0x1ff109['data']&&_0x1ff109['data']['token'])_tvdbToken=_0x1ff109['data']['token'];}}catch(_0x1ed7a6){}return _tvdbToken;});}function getTMDBTitle(_0x7238,_0x4a051a){return __async(this,null,function*(){const _0x348cc4=_0x4a051a==='tv'||_0x4a051a==='series'?'tv':'movie';let _0x4e9d8e='https://api.themoviedb.org/3/'+_0x348cc4+'/'+_0x7238+'?api_key='+TMDB_API_KEY;if(String(_0x7238)['startsWith']('tt')){_0x4e9d8e='https://api.themoviedb.org/3/find/'+_0x7238+'?external_source=imdb_id&api_key='+TMDB_API_KEY;try{const _0x360e99=yield fetch(_0x4e9d8e,{'headers':getHeaders()});if(_0x360e99['ok']){const _0x54f19b=yield _0x360e99['json']();if(_0x348cc4==='tv'&&_0x54f19b['tv_results']&&_0x54f19b['tv_results']['length']>0x0)return{'title':_0x54f19b['tv_results'][0x0]['name'],'numericId':_0x54f19b['tv_results'][0x0]['id']};else{if(_0x348cc4==='movie'&&_0x54f19b['movie_results']&&_0x54f19b['movie_results']['length']>0x0)return{'title':_0x54f19b['movie_results'][0x0]['title'],'numericId':_0x54f19b['movie_results'][0x0]['id']};}}}catch(_0x1a293c){}return{'title':null,'numericId':null};}try{const _0x3bf84c=yield fetch(_0x4e9d8e,{'headers':getHeaders()});if(_0x3bf84c['ok']){const _0x56efd2=yield _0x3bf84c['json']();return{'title':_0x348cc4==='tv'?_0x56efd2['name']:_0x56efd2['title'],'numericId':_0x7238};}}catch(_0x49de00){}return{'title':null,'numericId':null};});}function getTMDBSeasonName(_0x39d2b7,_0x2c60bd){return __async(this,null,function*(){const _0x30fb35='https://api.themoviedb.org/3/tv/'+_0x39d2b7+'/season/'+_0x2c60bd+'?api_key='+TMDB_API_KEY;try{const _0x2d8f9f=yield fetch(_0x30fb35);if(_0x2d8f9f['ok']){const _0xb65e76=yield _0x2d8f9f['json']();return _0xb65e76['name'];}}catch(_0x2927c4){}return null;});}function aniListBridge(_0x32a40e){return __async(this,null,function*(){const _0x501e4a='\x0a\x20\x20\x20\x20query\x20($search:\x20String)\x20{\x0a\x20\x20\x20\x20\x20\x20Media\x20(search:\x20$search,\x20type:\x20ANIME)\x20{\x0a\x20\x20\x20\x20\x20\x20\x20\x20id\x0a\x20\x20\x20\x20\x20\x20\x20\x20idMal\x0a\x20\x20\x20\x20\x20\x20}\x0a\x20\x20\x20\x20}\x0a\x20\x20\x20\x20';try{const _0x2c0106=yield fetch('https://graphql.anilist.co',{'method':'POST','headers':Object['assign'](getHeaders(),{'Content-Type':'application/json','Accept':'application/json'}),'body':JSON['stringify']({'query':_0x501e4a,'variables':{'search':_0x32a40e}})}),_0x122a9f=yield _0x2c0106['json']();if(_0x122a9f&&_0x122a9f['data']&&_0x122a9f['data']['Media'])return{'malId':_0x122a9f['data']['Media']['idMal'],'aniId':_0x122a9f['data']['Media']['id'],'absEp':null};}catch(_0xec027b){}return null;});}function getMalId(_0x49631f,_0x8b5584,_0x143658,_0x4e5b3d){return __async(this,null,function*(){try{let _0x116857='https://arm.haglund.dev/api/v2/tmdb?id='+_0x49631f;if(_0x8b5584==='tv'||_0x8b5584==='series')_0x116857+='&s='+_0x143658+'&e='+_0x4e5b3d;const _0x1b252b=yield fetch(_0x116857);if(_0x1b252b['ok']){const _0x3305b2=yield _0x1b252b['json']();if(_0x3305b2['mal']||_0x3305b2['mal_id']||_0x3305b2['anilist']||_0x3305b2['ani_id'])return{'malId':_0x3305b2['mal']||_0x3305b2['mal_id'],'aniId':_0x3305b2['anilist']||_0x3305b2['ani_id'],'absEp':_0x3305b2['episode']||_0x4e5b3d};}}catch(_0x2ef69d){}const _0x2d2d5c=yield getTMDBTitle(_0x49631f,_0x8b5584);let _0x4061aa=_0x2d2d5c['title'];const _0x37ea34=_0x2d2d5c['numericId'];if(_0x4061aa){let _0x201fe7=_0x4061aa;if((_0x8b5584==='tv'||_0x8b5584==='series')&&_0x143658>0x1&&_0x37ea34){const _0x5796a7=yield getTMDBSeasonName(_0x37ea34,_0x143658);_0x5796a7?_0x5796a7['toLowerCase']()['includes'](_0x4061aa['toLowerCase']())?_0x4061aa=_0x5796a7:_0x4061aa=_0x4061aa+'\x20'+_0x5796a7:_0x4061aa=_0x4061aa+'\x20Season\x20'+_0x143658;}console['log']('['+PROVIDER_NAME+']\x20TMDB\x20Title:\x20'+_0x4061aa);let _0x28017d=yield aniListBridge(_0x4061aa),_0x1997a4=![];(!_0x28017d||_0x28017d&&!_0x28017d['malId'])&&_0x4061aa!==_0x201fe7&&(console['log']('['+PROVIDER_NAME+']\x20Fallback\x20TMDB\x20Title:\x20'+_0x201fe7),_0x28017d=yield aniListBridge(_0x201fe7),_0x1997a4=!![]);if(_0x28017d)return _0x28017d['absEp']=_0x4e5b3d,_0x28017d['usedFallback']=_0x1997a4,_0x28017d['name']=_0x2d2d5c['title'],_0x28017d;}return null;});}function extractHLS(_0x558210,_0x5556a6){return __async(this,null,function*(){try{const _0x3b8ba3=Object['assign'](getHeaders(),{'Referer':'https://'+_0x5556a6+'/'}),_0x3f96f8=yield fetch(_0x558210,{'headers':_0x3b8ba3});if(!_0x3f96f8['ok'])return null;const _0x523114=yield _0x3f96f8['text']();let _0x27deb4=_0x523114['match'](/data-id="(\d+)"/);if(!_0x27deb4){const _0x52b1d7=_0x523114['match'](/<iframe[^>]*src="([^"]+)"/);if(_0x52b1d7){const _0x3c0b82=_0x52b1d7[0x1]['startsWith']('http')?_0x52b1d7[0x1]:'https://'+_0x5556a6+_0x52b1d7[0x1],_0x3c7781=yield fetch(_0x3c0b82,{'headers':_0x3b8ba3});if(_0x3c7781['ok']){const _0x416c09=yield _0x3c7781['text']();_0x27deb4=_0x416c09['match'](/data-id="(\d+)"/);}}}if(!_0x27deb4)return null;const _0x2f117f=_0x27deb4[0x1],_0x575cf1='https://'+_0x5556a6+'/stream/getSources?id='+_0x2f117f,_0x1e8d31=yield fetch(_0x575cf1,{'headers':Object['assign'](getHeaders(),{'X-Requested-With':'XMLHttpRequest','Referer':_0x558210})});if(!_0x1e8d31['ok'])return null;const _0x3ef4b4=yield _0x1e8d31['json']();if(_0x3ef4b4['sources']&&_0x3ef4b4['sources']['file']){const _0x696382=[];if(_0x3ef4b4['tracks'])for(const _0x2ef55d of _0x3ef4b4['tracks']){(_0x2ef55d['kind']==='captions'||_0x2ef55d['kind']==='subtitles')&&_0x696382['push']({'id':_0x2ef55d['label']||_0x2ef55d['file']||'Unknown','url':_0x2ef55d['file'],'language':_0x2ef55d['label']&&_0x2ef55d['label']['toLowerCase']()['includes']('eng')?'eng':'eng'});}var _0xf35ee6='1080p';try{const _0x2c8500=yield fetch(_0x3ef4b4['sources']['file'],{'headers':{'Referer':'https://'+_0x5556a6+'/'}});if(_0x2c8500['ok']){const _0x199bf2=yield _0x2c8500['text']();var _0x14bb62=_0x199bf2['match'](/RESOLUTION=\d+x(\d+)/);if(_0x14bb62)_0xf35ee6=_0x14bb62[0x1]+'p';}}catch(_0x151266){}return{'url':_0x3ef4b4['sources']['file'],'quality':_0xf35ee6,'subtitles':_0x696382,'headers':{'Referer':'https://'+_0x5556a6+'/','Origin':'https://'+_0x5556a6}};}}catch(_0x48a466){console['error']('['+PROVIDER_NAME+']\x20Extractor\x20Error\x20for\x20'+_0x5556a6+':',_0x48a466['message']);}return null;});}function fetchJson(_0x1f0c9f){return __async(this,arguments,function*(_0x1f544f,_0x5f10ac={}){const _0x42d9c8=yield fetch(_0x1f544f,_0x5f10ac);if(!_0x42d9c8['ok'])return null;return yield _0x42d9c8['json']();});}function getAbsoluteEpisode(_0x3257f8,_0x3865c7,_0x445b21,_0x3d69c3,_0x393045){return __async(this,null,function*(){if(_0x3865c7==='movie')return 0x1;let _0x319b7f=_0x3d69c3,_0x50dfd2=null,_0x1bee1b=null;try{const _0x55849c=yield fetchJson('https://api.themoviedb.org/3/tv/'+_0x3257f8+'/external_ids?api_key='+TMDB_API_KEY);_0x55849c&&(_0x50dfd2=_0x55849c['imdb_id'],_0x1bee1b=_0x55849c['tvdb_id']);}catch(_0x451c6c){}if(!_0x1bee1b&&_0x393045)try{console['log']('['+PROVIDER_NAME+']\x20Searching\x20TVDB\x20for\x20series:\x20'+_0x393045);const _0xabd20a=yield getTvdbToken();if(_0xabd20a){const _0x4ee90e=yield fetchJson('https://api4.thetvdb.com/v4/search?query='+encodeURIComponent(_0x393045),{'headers':{'Authorization':'Bearer\x20'+_0xabd20a}});if(_0x4ee90e&&_0x4ee90e['data']){const _0x43ab2c=_0x4ee90e['data']['find'](_0x3bb5e3=>_0x3bb5e3['type']==='series');if(_0x43ab2c){const _0x7646c9=_0x43ab2c['id']||_0x43ab2c['tvdb_id'];_0x7646c9&&(_0x1bee1b=parseInt(String(_0x7646c9)['replace'](/^series-/,''),0xa),console['log']('['+PROVIDER_NAME+']\x20Resolved\x20TVDB\x20ID\x20'+_0x1bee1b+'\x20from\x20search'));}}}}catch(_0x202f36){}if(_0x1bee1b)try{console['log']('['+PROVIDER_NAME+']\x20Attempting\x20TVDB\x20Math\x20for\x20TVDB:\x20'+_0x1bee1b);const _0x37f14f=yield getTvdbToken();if(_0x37f14f){const _0xee9b93=yield fetchJson('https://api4.thetvdb.com/v4/series/'+_0x1bee1b+'/episodes/default?season='+_0x445b21,{'headers':{'Authorization':'Bearer\x20'+_0x37f14f}});if(_0xee9b93&&_0xee9b93['data']&&_0xee9b93['data']['episodes']){const _0x4152c0=_0xee9b93['data']['episodes']['find'](_0x20c20d=>_0x20c20d['seasonNumber']==_0x445b21&&_0x20c20d['number']==_0x3d69c3);if(_0x4152c0&&_0x4152c0['absoluteNumber'])return console['log']('['+PROVIDER_NAME+']\x20TVDB\x20Math\x20calculated\x20absolute\x20episode:\x20'+_0x4152c0['absoluteNumber']),_0x4152c0['absoluteNumber'];}}}catch(_0x5836a1){}if(_0x50dfd2)try{console['log']('['+PROVIDER_NAME+']\x20Attempting\x20Regex\x20Math\x20for\x20IMDB:\x20'+_0x50dfd2);const _0x176e6b='https://aiometadata.elfhosted.com/stremio/80d082c4-6e99-4c97-a67d-3d9e242685ce/meta/series/'+_0x50dfd2+'.json',_0x4a4568=yield fetch(_0x176e6b);if(_0x4a4568['ok']){const _0x2c0fd4=yield _0x4a4568['text']();let _0x3b1d5a=0x0,_0x5ac192=![];const _0x2d2804=/"season"\s*:\s*(\d+)/g;let _0x141728;while((_0x141728=_0x2d2804['exec'](_0x2c0fd4))!==null){_0x5ac192=!![];const _0x30e845=parseInt(_0x141728[0x1]);_0x30e845>0x0&&_0x30e845<_0x445b21&&_0x3b1d5a++;}if(_0x5ac192){let _0x4bc9b6=_0x3b1d5a+_0x3d69c3;return console['log']('['+PROVIDER_NAME+']\x20Regex\x20Math\x20calculated\x20absolute\x20episode:\x20'+_0x4bc9b6),_0x4bc9b6;}}}catch(_0x1228aa){}try{console['log']('['+PROVIDER_NAME+']\x20Cinemeta\x20failed.\x20Falling\x20back\x20to\x20TMDB\x20math...');const _0x3d1ad3='https://api.themoviedb.org/3/tv/'+_0x3257f8+'?api_key='+TMDB_API_KEY,_0x4d2fe4=yield fetchJson(_0x3d1ad3,{});if(_0x4d2fe4&&_0x4d2fe4['seasons']){let _0x3f9d4d=0x0;const _0x21c63b=_0x4d2fe4['seasons']['filter'](_0x460492=>_0x460492['season_number']>0x0&&_0x460492['season_number']<_0x445b21);for(let _0x529125 of _0x21c63b){_0x3f9d4d+=_0x529125['episode_count'];}return _0x3f9d4d+=_0x3d69c3,console['log']('['+PROVIDER_NAME+']\x20TMDB\x20Calculated\x20absolute\x20episode:\x20'+_0x3f9d4d),_0x3f9d4d;}}catch(_0x309d4f){}return _0x319b7f;});}function getStreams(_0x1bd426,_0x57b72d,_0x46c576,_0x3cf77d){return __async(this,null,function*(){try{console['log']('['+PROVIDER_NAME+']\x20Fetching:\x20'+_0x1bd426+'\x20S'+_0x46c576+'\x20E'+_0x3cf77d);const _0x4e64ae=yield getMalId(_0x1bd426,_0x57b72d,_0x46c576,_0x3cf77d);if(!_0x4e64ae||!_0x4e64ae['malId']&&!_0x4e64ae['aniId'])return console['log']('['+PROVIDER_NAME+']\x20Exhausted\x20all\x20mapping\x20bridges.\x20Could\x20not\x20resolve\x20ID.'),[];const _0x4ebb8e=!!_0x4e64ae['malId'],_0x47454f=_0x4ebb8e?_0x4e64ae['malId']:_0x4e64ae['aniId'],_0x4e13b5=_0x4ebb8e?'mal':'ani';let _0x94cbbc=_0x57b72d==='movie'?0x1:_0x4e64ae['absEp'];_0x57b72d!=='movie'&&_0x4e64ae['usedFallback']&&_0x46c576>0x1&&(_0x94cbbc=yield getAbsoluteEpisode(_0x1bd426,_0x57b72d,_0x46c576,_0x3cf77d,_0x4e64ae['name']));console['log']('['+PROVIDER_NAME+']\x20Mapped\x20to\x20'+_0x4e13b5['toUpperCase']()+'\x20ID:\x20'+_0x47454f+'\x20|\x20Ep:\x20'+_0x94cbbc);const _0x487329=[],_0x3b4784=String(_0x46c576)['padStart'](0x2,'0'),_0x31753d=String(_0x3cf77d)['padStart'](0x2,'0'),_0x33d990=_0x57b72d==='movie'?'':'\x20S'+_0x3b4784+'E'+_0x31753d,_0x4fc92e=[{'id':'Vidstream','domain':'megaplay.buzz'}];for(const _0x46cd33 of _0x4fc92e){const _0x540897=['sub','dub'];for(const _0x2457fe of _0x540897){const _0x5a5977='https://'+_0x46cd33['domain']+'/stream/'+_0x4e13b5+'/'+_0x47454f+'/'+_0x94cbbc+'/'+_0x2457fe,_0x326546=yield extractHLS(_0x5a5977,_0x46cd33['domain']);_0x326546&&_0x487329['push']({'name':''+PROVIDER_NAME+_0x33d990+'\x20('+_0x2457fe['toUpperCase']()+')','quality':_0x326546['quality']||'1080p','title':''+_0x46cd33['id']+_0x33d990+'\x20('+_0x2457fe['toUpperCase']()+')','size':''+_0x46cd33['id']+_0x33d990+'\x20('+_0x2457fe['toUpperCase']()+')','url':_0x326546['url'],'subtitles':_0x326546['subtitles'],'headers':_0x326546['headers']});}}return console['log']('['+PROVIDER_NAME+']\x20Returning\x20'+_0x487329['length']+'\x20direct\x20stream\x20URLs.'),_0x487329;}catch(_0x1ca6ec){return console['error']('['+PROVIDER_NAME+']\x20Fatal\x20Error:',_0x1ca6ec),[];}});}function search(_0x38fb0c){return __async(this,null,function*(){return[];});}function getCatalog(_0x5e3b1c){return __async(this,null,function*(){return[];});}function getItemDetails(_0x16b993){return __async(this,null,function*(){return[];});}typeof module!=='undefined'&&module['exports']?module['exports']={'getStreams':getStreams,'search':search,'getCatalog':getCatalog,'getItemDetails':getItemDetails}:global['getStreams']=getStreams;
+var PROVIDER_NAME = 'AnikotoTV';
+var TMDB_API_KEY = '439c478a771f35c05022f9feabcca01c';
+var TVDB_API_KEY = '777140fb-de92-440a-aec2-95eb51e2d7ab';
+var MOBILE_UAS = [
+  'Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36',
+  'Mozilla/5.0 (Linux; Android 13; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36',
+  'Mozilla/5.0 (Linux; Android 12; Pixel 6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Mobile Safari/537.36',
+  'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1'
+];
+
+function getHeaders(extra) {
+  var ua = MOBILE_UAS[Math.floor(Math.random() * MOBILE_UAS.length)];
+  var headers = { 'User-Agent': ua, 'Accept-Language': 'en-US,en;q=0.9' };
+  if (extra) {
+    for (var key in extra) {
+      headers[key] = extra[key];
+    }
+  }
+  return headers;
+}
+
+var _tvdbToken = null;
+async function getTvdbToken() {
+  if (_tvdbToken) return _tvdbToken;
+  try {
+    console.log("[" + PROVIDER_NAME + "] Fetching TVDB token...");
+    var res = await fetch('https://api4.thetvdb.com/v4/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ apikey: TVDB_API_KEY })
+    });
+    if (res.ok) {
+      var data = await res.json();
+      if (data && data.data && data.data.token) {
+        _tvdbToken = data.data.token;
+        console.log("[" + PROVIDER_NAME + "] TVDB token fetched successfully.");
+      }
+    }
+  } catch (e) {
+    console.log("[" + PROVIDER_NAME + "] Error fetching TVDB token: " + e.message);
+  }
+  return _tvdbToken;
+}
+
+async function getTMDBTitle(id, type) {
+  const mediaType = (type === 'tv' || type === 'series') ? 'tv' : 'movie';
+  let url = 'https://api.themoviedb.org/3/' + mediaType + '/' + id + '?api_key=' + TMDB_API_KEY;
+  console.log("[" + PROVIDER_NAME + "] Fetching TMDB Title for ID: " + id);
+
+  if (String(id).startsWith('tt')) {
+    url = 'https://api.themoviedb.org/3/find/' + id + '?external_source=imdb_id&api_key=' + TMDB_API_KEY;
+    try {
+      const res = await fetch(url, { headers: getHeaders() });
+      if (res.ok) {
+        const data = await res.json();
+        if (mediaType === 'tv' && data.tv_results && data.tv_results.length > 0) {
+          return { title: data.tv_results[0].name, numericId: data.tv_results[0].id };
+        } else if (mediaType === 'movie' && data.movie_results && data.movie_results.length > 0) {
+          return { title: data.movie_results[0].title, numericId: data.movie_results[0].id };
+        }
+      }
+    } catch (e) {
+      console.log("[" + PROVIDER_NAME + "] TMDB Find Error: " + e.message);
+    }
+    return { title: null, numericId: null };
+  }
+
+  try {
+    const res = await fetch(url, { headers: getHeaders() });
+    if (res.ok) {
+      const data = await res.json();
+      return { title: mediaType === 'tv' ? data.name : data.title, numericId: id };
+    }
+  } catch (e) {
+    console.log("[" + PROVIDER_NAME + "] TMDB Fetch Error: " + e.message);
+  }
+  return { title: null, numericId: null };
+}
+
+async function getTMDBSeasonName(id, season) {
+  const url = 'https://api.themoviedb.org/3/tv/' + id + '/season/' + season + '?api_key=' + TMDB_API_KEY;
+  try {
+    const res = await fetch(url);
+    if (res.ok) {
+      const data = await res.json();
+      return data.name;
+    }
+  } catch (e) {}
+  return null;
+}
+
+async function aniListBridge(search) {
+  const query = `
+    query ($search: String) {
+      Media (search: $search, type: ANIME) {
+        id
+        idMal
+      }
+    }
+  `;
+  try {
+    console.log("[" + PROVIDER_NAME + "] Searching AniList for: " + search);
+    const res = await fetch('https://graphql.anilist.co', {
+      method: 'POST',
+      headers: Object.assign(getHeaders(), { 'Content-Type': 'application/json', 'Accept': 'application/json' }),
+      body: JSON.stringify({ query: query, variables: { search: search } })
+    });
+    const data = await res.json();
+    if (data && data.data && data.data.Media) {
+      console.log("[" + PROVIDER_NAME + "] AniList found MAL ID: " + data.data.Media.idMal);
+      return { malId: data.data.Media.idMal, aniId: data.data.Media.id, absEp: null };
+    }
+  } catch (e) {
+    console.log("[" + PROVIDER_NAME + "] AniList Error: " + e.message);
+  }
+  return null;
+}
+
+async function getMalId(id, type, season, ep) {
+  try {
+    let url = 'https://arm.haglund.dev/api/v2/tmdb?id=' + id;
+    if (type === 'tv' || type === 'series') url += '&s=' + season + '&e=' + ep;
+    console.log("[" + PROVIDER_NAME + "] Fetching ARM mapping: " + url);
+    const res = await fetch(url);
+    if (res.ok) {
+      const data = await res.json();
+      if (data.mal || data.mal_id || data.anilist || data.ani_id) {
+        console.log("[" + PROVIDER_NAME + "] ARM mapping successful.");
+        return { malId: data.mal || data.mal_id, aniId: data.anilist || data.ani_id, absEp: data.episode || ep };
+      }
+    }
+  } catch (e) {
+    console.log("[" + PROVIDER_NAME + "] ARM mapping failed: " + e.message);
+  }
+
+  const tmdbData = await getTMDBTitle(id, type);
+  let title = tmdbData.title;
+  const numericId = tmdbData.numericId;
+
+  if (title) {
+    let fallbackTitle = title;
+    if ((type === 'tv' || type === 'series') && season > 1 && numericId) {
+      const seasonName = await getTMDBSeasonName(numericId, season);
+      if (seasonName) {
+        if (seasonName.toLowerCase().includes(title.toLowerCase())) {
+          title = seasonName;
+        } else {
+          title = title + ' ' + seasonName;
+        }
+      } else {
+        title = title + ' Season ' + season;
+      }
+    }
+    console.log('[' + PROVIDER_NAME + '] TMDB Title for AniList search: ' + title);
+    let aniData = await aniListBridge(title);
+    let usedFallback = false;
+
+    if ((!aniData || (aniData && !aniData.malId)) && title !== fallbackTitle) {
+      console.log('[' + PROVIDER_NAME + '] Fallback TMDB Title: ' + fallbackTitle);
+      aniData = await aniListBridge(fallbackTitle);
+      usedFallback = true;
+    }
+
+    if (aniData) {
+      aniData.absEp = ep;
+      aniData.usedFallback = usedFallback;
+      aniData.name = tmdbData.title;
+      return aniData;
+    }
+  }
+  return null;
+}
+
+async function extractHLS(url, domain) {
+  try {
+    console.log("[" + PROVIDER_NAME + "] Extracting HLS from: " + url);
+    const headers = Object.assign(getHeaders(), { 'Referer': 'https://' + domain + '/' });
+    const res = await fetch(url, { headers: headers });
+    if (!res.ok) {
+      console.log("[" + PROVIDER_NAME + "] Failed to fetch embed page, status: " + res.status);
+      return null;
+    }
+    const html = await res.text();
+    let dataIdMatch = html.match(/data-id="(\d+)"/);
+
+    if (!dataIdMatch) {
+      const iframeMatch = html.match(/<iframe[^>]*src="([^"]+)"/);
+      if (iframeMatch) {
+        const iframeUrl = iframeMatch[1].startsWith('http') ? iframeMatch[1] : 'https://' + domain + iframeMatch[1];
+        console.log("[" + PROVIDER_NAME + "] Found iframe: " + iframeUrl);
+        const iframeRes = await fetch(iframeUrl, { headers: headers });
+        if (iframeRes.ok) {
+          const iframeHtml = await iframeRes.text();
+          dataIdMatch = iframeHtml.match(/data-id="(\d+)"/);
+        }
+      }
+    }
+
+    if (!dataIdMatch) {
+      console.log("[" + PROVIDER_NAME + "] Could not find data-id.");
+      return null;
+    }
+
+    const dataId = dataIdMatch[1];
+    const sourceUrl = 'https://' + domain + '/stream/getSources?id=' + dataId;
+    console.log("[" + PROVIDER_NAME + "] Fetching sources from: " + sourceUrl);
+    
+    const sourceRes = await fetch(sourceUrl, {
+      headers: Object.assign(getHeaders(), { 'X-Requested-With': 'XMLHttpRequest', 'Referer': url })
+    });
+
+    if (!sourceRes.ok) {
+      console.log("[" + PROVIDER_NAME + "] Failed to fetch sources, status: " + sourceRes.status);
+      return null;
+    }
+
+    const sourceData = await sourceRes.json();
+    if (sourceData.sources && sourceData.sources.file) {
+      var quality = '1080p';
+      try {
+        const m3u8Res = await fetch(sourceData.sources.file, { headers: { 'Referer': 'https://' + domain + '/' } });
+        if (m3u8Res.ok) {
+          const m3u8Text = await m3u8Res.text();
+          var resMatch = m3u8Text.match(/RESOLUTION=\d+x(\d+)/);
+          if (resMatch) quality = resMatch[1] + 'p';
+        }
+      } catch (e) {
+        console.log("[" + PROVIDER_NAME + "] Error parsing m3u8 for quality: " + e.message);
+      }
+      
+      console.log("[" + PROVIDER_NAME + "] Successfully extracted m3u8: " + sourceData.sources.file);
+      return {
+        url: sourceData.sources.file,
+        quality: quality,
+        headers: { 'Referer': 'https://' + domain + '/', 'Origin': 'https://' + domain }
+      };
+    }
+  } catch (e) {
+    console.error('[' + PROVIDER_NAME + '] Extractor Error for ' + domain + ':', e.message);
+  }
+  return null;
+}
+
+async function fetchJson(url, options = {}) {
+  const res = await fetch(url, options);
+  if (!res.ok) return null;
+  return await res.json();
+}
+
+async function getAbsoluteEpisode(id, type, season, ep, name) {
+  if (type === 'movie') return 1;
+  let absEp = ep;
+  let imdbId = null;
+  let tvdbId = null;
+
+  try {
+    const extIds = await fetchJson('https://api.themoviedb.org/3/tv/' + id + '/external_ids?api_key=' + TMDB_API_KEY);
+    if (extIds) {
+      imdbId = extIds.imdb_id;
+      tvdbId = extIds.tvdb_id;
+    }
+  } catch (e) {}
+
+  if (!tvdbId && name) {
+    try {
+      console.log('[' + PROVIDER_NAME + '] Searching TVDB for series: ' + name);
+      const token = await getTvdbToken();
+      if (token) {
+        const searchRes = await fetchJson('https://api4.thetvdb.com/v4/search?query=' + encodeURIComponent(name), { headers: { 'Authorization': 'Bearer ' + token } });
+        if (searchRes && searchRes.data) {
+          const series = searchRes.data.find(s => s.type === 'series');
+          if (series) {
+            const foundId = series.id || series.tvdb_id;
+            if (foundId) {
+              tvdbId = parseInt(String(foundId).replace(/^series-/, ''), 10);
+              console.log('[' + PROVIDER_NAME + '] Resolved TVDB ID ' + tvdbId + ' from search');
+            }
+          }
+        }
+      }
+    } catch (e) {}
+  }
+
+  if (tvdbId) {
+    try {
+      console.log('[' + PROVIDER_NAME + '] Attempting TVDB Math for TVDB: ' + tvdbId);
+      const token = await getTvdbToken();
+      if (token) {
+        const epRes = await fetchJson('https://api4.thetvdb.com/v4/series/' + tvdbId + '/episodes/default?season=' + season, { headers: { 'Authorization': 'Bearer ' + token } });
+        if (epRes && epRes.data && epRes.data.episodes) {
+          const targetEp = epRes.data.episodes.find(e => e.seasonNumber == season && e.number == ep);
+          if (targetEp && targetEp.absoluteNumber) {
+            console.log('[' + PROVIDER_NAME + '] TVDB Math calculated absolute episode: ' + targetEp.absoluteNumber);
+            return targetEp.absoluteNumber;
+          }
+        }
+      }
+    } catch (e) {}
+  }
+
+  if (imdbId) {
+    try {
+      console.log('[' + PROVIDER_NAME + '] Attempting Regex Math for IMDB: ' + imdbId);
+      const cinemetaUrl = 'https://aiometadata.elfhosted.com/stremio/80d082c4-6e99-4c97-a67d-3d9e242685ce/meta/series/' + imdbId + '.json';
+      const res = await fetch(cinemetaUrl);
+      if (res.ok) {
+        const text = await res.text();
+        let prevEps = 0;
+        let found = false;
+        const regex = /"season"\s*:\s*(\d+)/g;
+        let match;
+        while ((match = regex.exec(text)) !== null) {
+          found = true;
+          const sNum = parseInt(match[1]);
+          if (sNum > 0 && sNum < season) {
+            prevEps++;
+          }
+        }
+        if (found) {
+          let calcEp = prevEps + ep;
+          console.log('[' + PROVIDER_NAME + '] Regex Math calculated absolute episode: ' + calcEp);
+          return calcEp;
+        }
+      }
+    } catch (e) {}
+  }
+
+  try {
+    console.log('[' + PROVIDER_NAME + '] Cinemeta failed. Falling back to TMDB math...');
+    const tmdbRes = await fetchJson('https://api.themoviedb.org/3/tv/' + id + '?api_key=' + TMDB_API_KEY, {});
+    if (tmdbRes && tmdbRes.seasons) {
+      let prevEps = 0;
+      const pastSeasons = tmdbRes.seasons.filter(s => s.season_number > 0 && s.season_number < season);
+      for (let s of pastSeasons) {
+        prevEps += s.episode_count;
+      }
+      prevEps += ep;
+      console.log('[' + PROVIDER_NAME + '] TMDB Calculated absolute episode: ' + prevEps);
+      return prevEps;
+    }
+  } catch (e) {}
+
+  return absEp;
+}
+
+async function getStreams(id, type, season, ep) {
+  try {
+    console.log('[' + PROVIDER_NAME + '] Fetching: ' + id + ' S' + season + ' E' + ep);
+    const mapping = await getMalId(id, type, season, ep);
+    if (!mapping || (!mapping.malId && !mapping.aniId)) {
+      console.log('[' + PROVIDER_NAME + '] Exhausted all mapping bridges. Could not resolve ID.');
+      return [];
+    }
+
+    const isMal = !!mapping.malId;
+    const targetId = isMal ? mapping.malId : mapping.aniId;
+    const idType = isMal ? 'mal' : 'ani';
+    let absEp = type === 'movie' ? 1 : mapping.absEp;
+
+    if (type !== 'movie' && mapping.usedFallback && season > 1) {
+      absEp = await getAbsoluteEpisode(id, type, season, ep, mapping.name);
+    }
+
+    console.log('[' + PROVIDER_NAME + '] Mapped to ' + idType.toUpperCase() + ' ID: ' + targetId + ' | Ep: ' + absEp);
+
+    const streams = [];
+    const servers = [{ id: 'Vidstream', domain: 'megaplay.buzz' }];
+
+    for (const server of servers) {
+      const subTypes = ['sub'];
+      for (const subType of subTypes) {
+        const url = 'https://' + server.domain + '/stream/' + idType + '/' + targetId + '/' + absEp + '/' + subType;
+        console.log('[' + PROVIDER_NAME + '] Requesting stream URL: ' + url);
+        const hlsData = await extractHLS(url, server.domain);
+        if (hlsData) {
+          streams.push({
+            name: PROVIDER_NAME + ' [' + server.id + ']',
+            quality: hlsData.quality || '1080p',
+            title: '1080p',
+            url: hlsData.url,
+            headers: hlsData.headers
+          });
+        }
+      }
+    }
+
+    console.log('[' + PROVIDER_NAME + '] Returning ' + streams.length + ' direct stream URLs.');
+    return streams;
+  } catch (e) {
+    console.error('[' + PROVIDER_NAME + '] Fatal Error:', e.message);
+    return [];
+  }
+}
+
+async function search(query) { return []; }
+async function getCatalog(args) { return []; }
+async function getItemDetails(id) { return []; }
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { getStreams, search, getCatalog, getItemDetails };
+} else {
+  global.getStreams = getStreams;
+}
