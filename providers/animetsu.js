@@ -3,31 +3,31 @@ const TMDB_API_KEY = '439c478a771f35c05022f9feabcca01c';
 const BASE_URL = 'https://anineko.to';
 const PROXY_URL = 'https://swiftstream.top/proxy';
 
-const MOBILE_UAS = [
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
-];
-
 function getHeaders() {
   return {
-    'User-Agent': MOBILE_UAS[0],
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
     'Referer': 'https://anineko.to/',
-    'X-Requested-With': 'XMLHttpRequest',
-    'Accept': '*/*'
+    'X-Requested-With': 'XMLHttpRequest'
   };
 }
 
-async function fetchJson(url, options = {}, timeout = 10000) {
+async function fetchText(url, options = {}, timeout = 10000) {
   try {
     const controller = new AbortController();
     const id = setTimeout(() => controller.abort(), timeout);
     const response = await fetch(url, { ...options, signal: controller.signal });
     clearTimeout(id);
     if (!response.ok) return null;
-    return await response.json();
+    return await response.text();
   } catch (e) {
-    console.log(`[${PROVIDER_NAME}] Lỗi kết nối: ${e.message}`);
+    console.log(`[${PROVIDER_NAME}] Lỗi tải trang: ${e.message}`);
     return null;
   }
+}
+
+async function fetchJson(url, options = {}, timeout = 10000) {
+  const text = await fetchText(url, options, timeout);
+  try { return JSON.parse(text); } catch (e) { return null; }
 }
 
 async function getAbsoluteEpisode(tmdbId, season, episode) {
@@ -38,9 +38,7 @@ async function getAbsoluteEpisode(tmdbId, season, episode) {
     if (data && data.seasons) {
       let total = 0;
       const previousSeasons = data.seasons.filter(s => s.season_number > 0 && s.season_number < season);
-      for (const s of previousSeasons) {
-        total += s.episode_count;
-      }
+      for (const s of previousSeasons) total += s.episode_count;
       return total + episode;
     }
   } catch (e) {}
@@ -48,7 +46,7 @@ async function getAbsoluteEpisode(tmdbId, season, episode) {
 }
 
 async function makeStream(serverName, epTag, type, url, quality) {
-  const headers = { 'User-Agent': MOBILE_UAS[0], 'Referer': 'https://anineko.to/' };
+  const headers = { 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://anineko.to/' };
   return {
     name: `NTL Global`,
     title: `${epTag}\n🌸 ${PROVIDER_NAME} - ${serverName} | 📺 ${quality} | 🗣️ ${type.toUpperCase()}`,
@@ -56,10 +54,7 @@ async function makeStream(serverName, epTag, type, url, quality) {
     resLabel: quality,
     source: `${PROVIDER_NAME} (${serverName})`,
     headers: headers,
-    behaviorHints: {
-      proxyHeaders: { request: headers },
-      notWebReady: true
-    }
+    behaviorHints: { proxyHeaders: { request: headers }, notWebReady: true }
   };
 }
 
@@ -67,7 +62,6 @@ async function getStreams(tmdbId, mediaType, season, episode, meta) {
   const headers = getHeaders();
   const isSeries = mediaType === 'tv' || mediaType === 'series';
   
-  // 1. Lấy tên phim từ TMDB
   const tmdbUrl = `https://api.themoviedb.org/3/${isSeries ? 'tv' : 'movie'}/${tmdbId}?api_key=${TMDB_API_KEY}`;
   const tmdbData = await fetchJson(tmdbUrl);
   if (!tmdbData) return [];
@@ -75,32 +69,31 @@ async function getStreams(tmdbId, mediaType, season, episode, meta) {
   const fullTitle = tmdbData.name || tmdbData.title;
   const searchTitle = fullTitle.split(':')[0].trim();
   
-  // 2. Tìm kiếm bằng AJAX endpoint của AniNeko
   console.log(`[${PROVIDER_NAME}] Đang tìm kiếm: ${searchTitle}`);
   const searchUrl = `${BASE_URL}/ajax/search?q=${encodeURIComponent(searchTitle)}`;
-  const searchData = await fetchJson(searchUrl, { headers });
+  const htmlResult = await fetchText(searchUrl, { headers });
 
-  if (!searchData || !searchData.results || searchData.results.length === 0) {
-    console.log(`[${PROVIDER_NAME}] Không tìm thấy kết quả.`);
+  if (!htmlResult) {
+    console.log(`[${PROVIDER_NAME}] Không nhận được phản hồi từ server.`);
     return [];
   }
 
-  // 3. Khớp phim (Ưu tiên anilistId từ DB)
-  let matchedAnime = null;
-  const targetAniId = meta?.anilistId;
+  // Bóc tách ID từ HTML bằng Regex
+  // Tìm các đoạn có dạng data-id="123" hoặc href="/anime/ten-phim-123"
+  const idMatches = [...htmlResult.matchAll(/data-id="(\d+)"/g)].map(m => m[1]);
+  const slugMatches = [...htmlResult.matchAll(/\/anime\/[^"-]+-(\d+)/g)].map(m => m[1]);
+  
+  const allIds = [...new Set([...idMatches, ...slugMatches])];
 
-  if (targetAniId) {
-    const aniRegex = new RegExp(`/${targetAniId}[-.]`);
-    matchedAnime = searchData.results.find(r => 
-      aniRegex.test(r.cover_image?.large || '') || 
-      aniRegex.test(r.banner || '')
-    );
+  if (allIds.length === 0) {
+    console.log(`[${PROVIDER_NAME}] Không tìm thấy ID phim trong kết quả tìm kiếm.`);
+    return [];
   }
 
-  if (!matchedAnime) matchedAnime = searchData.results[0];
-  console.log(`[${PROVIDER_NAME}] Đã khớp: ${matchedAnime.id}`);
+  // Tạm thời chọn ID đầu tiên tìm thấy
+  const matchedId = allIds[0];
+  console.log(`[${PROVIDER_NAME}] Đã tìm thấy ID: ${matchedId}`);
 
-  // 4. Lấy link stream
   const targetEp = isSeries ? await getAbsoluteEpisode(tmdbId, season, episode) : 1;
   const epTag = isSeries ? `${fullTitle} (Phần ${season})\nTập ${String(episode).padStart(2, '0')}` : fullTitle;
 
@@ -110,21 +103,19 @@ async function getStreams(tmdbId, mediaType, season, episode, meta) {
 
   for (const srv of servers) {
     for (const type of types) {
-      // Sử dụng API v2 của AniNeko
-      const apiStreamUrl = `${BASE_URL}/api/v2/anime/oppai/${matchedAnime.id}/${targetEp}?server=${srv}&source_type=${type}`;
+      const apiStreamUrl = `${BASE_URL}/api/v2/anime/oppai/${matchedId}/${targetEp}?server=${srv}&source_type=${type}`;
       const streamData = await fetchJson(apiStreamUrl, { headers });
       
       if (streamData && streamData.sources) {
         for (const source of streamData.sources) {
           if (source.url) {
-            const stream = await makeStream(
+            streams.push(await makeStream(
               srv.charAt(0).toUpperCase() + srv.slice(1),
               epTag,
               type,
               PROXY_URL + source.url,
               source.quality || '1080p'
-            );
-            streams.push(stream);
+            ));
           }
         }
       }
