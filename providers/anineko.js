@@ -56,9 +56,6 @@ function searchAniNeko(keyword) {
       });
     }
     console.log("[AniNeko] Search found " + results.length + " results for keyword: " + keyword);
-    results.forEach(function(r, idx) {
-      console.log("[AniNeko] Result " + idx + ": " + r.title + " | " + r.href);
-    });
     return results;
   });
 }
@@ -88,7 +85,6 @@ function findBestMatch(results, title, originalTitle) {
     var s1 = titleScore(r.title, title);
     var s2 = titleScore(r.title, originalTitle);
     var s = Math.max(s1, s2);
-    console.log("[AniNeko] Comparing '" + r.title + "' with '" + title + "' (Score: " + s1 + ") and '" + originalTitle + "' (Score: " + s2 + ")");
     if (s > bestScore) { bestScore = s; best = r; }
   });
   console.log("[AniNeko] Best match score: " + bestScore);
@@ -164,7 +160,7 @@ function extractStreamsFromEpisode(episodeUrl) {
       var serverName = match[2].trim();
       var label = match[3].trim();
 
-      console.log("[AniNeko] Found server button: " + serverName + " | Label: " + label + " | URL: " + videoUrl);
+      console.log("[AniNeko] Found server button: " + serverName + " | Label: " + label);
 
       if (label !== "Sort Sub" && label !== "Soft Sub") {
         console.log("[AniNeko] Skipping server " + serverName + " due to label: " + label);
