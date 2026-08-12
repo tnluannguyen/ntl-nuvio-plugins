@@ -1,11 +1,10 @@
 const PROVIDER_NAME = 'Animetsu';
 const TMDB_API_KEY = '439c478a771f35c05022f9feabcca01c';
-const BASE_URL = 'https://animetsu.vu/v2/api';
+const BASE_URL = 'https://animetsu.vu/api/v2'; // Đổi vị trí api/v2
 const PROXY_URL = 'https://swiftstream.top/proxy';
 
 const MOBILE_UAS = [
   'Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36',
-  'Mozilla/5.0 (Linux; Android 13; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36',
   'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1'
 ];
 
@@ -26,12 +25,12 @@ async function fetchJson(url, options = {}, timeout = 12000) {
     const response = await fetch(url, { ...options, signal: controller.signal });
     clearTimeout(id);
     if (!response.ok) {
-      console.log(`Fetch Failed: ${url} - Status: ${response.status}`);
+      console.log(`[${PROVIDER_NAME}] HTTP ${response.status} tại: ${url}`);
       return null;
     }
     return await response.json();
   } catch (e) {
-    console.log(`Fetch Error: ${url} - ${e.message}`);
+    console.log(`[${PROVIDER_NAME}] Lỗi Fetch: ${e.message}`);
     return null;
   }
 }
@@ -47,31 +46,10 @@ async function getAbsoluteEpisode(tmdbId, season, episode) {
       for (const s of previousSeasons) {
         total += s.episode_count;
       }
-      const abs = total + episode;
-      console.log(`Absolute Episode Calculated: ${abs}`);
-      return abs;
+      return total + episode;
     }
-  } catch (e) {
-    console.log(`Absolute Episode Error: ${e.message}`);
-  }
+  } catch (e) {}
   return episode;
-}
-
-async function aniListBridge(searchTitle) {
-  const query = `query ($search: String) { Media (search: $search, type: ANIME) { id } }`;
-  try {
-    const res = await fetch('https://graphql.anilist.co', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query, variables: { search: searchTitle } })
-    });
-    const data = await res.json();
-    const id = data?.data?.Media?.id || null;
-    console.log(`AniList Bridge: "${searchTitle}" -> ID: ${id}`);
-    return id;
-  } catch (e) {
-    return null;
-  }
 }
 
 async function makeStream(serverName, epTag, type, url, quality, ua) {
@@ -93,71 +71,56 @@ async function makeStream(serverName, epTag, type, url, quality, ua) {
   };
 }
 
-async function getStreams(tmdbId, mediaType, season, episode) {
+async function getStreams(tmdbId, mediaType, season, episode, meta) {
   const ua = MOBILE_UAS[0];
   const headers = getHeaders(ua);
   const isSeries = mediaType === 'tv' || mediaType === 'series';
   
-  console.log(`Bắt đầu getStreams cho TMDB: ${tmdbId}`);
-
+  // 1. Lấy thông tin TMDB để có tên phim chuẩn
   const tmdbUrl = `https://api.themoviedb.org/3/${isSeries ? 'tv' : 'movie'}/${tmdbId}?api_key=${TMDB_API_KEY}`;
   const tmdbData = await fetchJson(tmdbUrl);
-  if (!tmdbData) {
-    console.log(`Không lấy được dữ liệu từ TMDB.`);
-    return [];
-  }
-
-  const isAnimation = tmdbData.genres?.some(g => g.name === 'Animation');
-  const isAsian = ['ja', 'zh', 'ko'].includes(tmdbData.original_language);
-  
-  if (!isAnimation || !isAsian) {
-    console.log(`Bỏ qua: Không phải Anime Châu Á (Lang: ${tmdbData.original_language})`);
-    return [];
-  }
+  if (!tmdbData) return [];
 
   const fullTitle = tmdbData.name || tmdbData.title;
-  const releaseYear = (tmdbData.first_air_date || tmdbData.release_date || '').split('-')[0];
   const searchTitle = fullTitle.split(':')[0].trim();
   
-  console.log(`Khớp phim: "${fullTitle}" (${releaseYear})`);
+  // 2. Tìm kiếm trên Animetsu (Thử nghiệm 2 loại endpoint để tránh 404)
+  let searchData = null;
+  const searchPaths = [
+    `${BASE_URL}/search?query=`,
+    `https://animetsu.vu/v2/api/search?query=`
+  ];
 
-  let query = searchTitle;
-  if (isSeries && season > 1) query += ` Season ${season}`;
-
-  console.log(`Đang tìm kiếm trên Animetsu với query: "${query}"`);
-  let searchData = await fetchJson(`${BASE_URL}/anime/search/?query=${encodeURIComponent(query)}`, { headers });
-  
-  if (!searchData || !searchData.results || searchData.results.length === 0) {
-    console.log(`Không có kết quả cho query chính. Thử tìm kiếm với tên gốc: "${searchTitle}"`);
-    searchData = await fetchJson(`${BASE_URL}/anime/search/?query=${encodeURIComponent(searchTitle)}`, { headers });
+  for (const path of searchPaths) {
+    console.log(`[${PROVIDER_NAME}] Đang thử tìm kiếm tại: ${path}${encodeURIComponent(searchTitle)}`);
+    searchData = await fetchJson(`${path}${encodeURIComponent(searchTitle)}`, { headers });
+    if (searchData && searchData.results && searchData.results.length > 0) break;
   }
 
   if (!searchData || !searchData.results || searchData.results.length === 0) {
-    console.log(`Hoàn toàn không tìm thấy phim trên Animetsu.`);
+    console.log(`[${PROVIDER_NAME}] Không tìm thấy phim trên hệ thống.`);
     return [];
   }
 
-  console.log(`Tìm thấy ${searchData.results.length} kết quả ứng viên.`);
-
+  // 3. Khớp phim thông minh sử dụng ID từ DB (anilistId)
   let matchedAnime = null;
-  const aniId = await aniListBridge(searchTitle);
-  
-  if (aniId) {
-    const aniRegex = new RegExp(`/${aniId}[-.]`);
-    matchedAnime = searchData.results.find(r => aniRegex.test(r.cover_image?.large || '') || aniRegex.test(r.banner || ''));
-    if (matchedAnime) console.log(`Đã khớp phim qua AniList ID: ${matchedAnime.id}`);
-  }
+  const targetAniId = meta?.anilistId;
 
-  if (!matchedAnime && releaseYear) {
-    matchedAnime = searchData.results.find(r => r.year === parseInt(releaseYear));
-    if (matchedAnime) console.log(`Đã khớp phim qua Năm phát hành: ${matchedAnime.id}`);
+  if (targetAniId) {
+    const aniRegex = new RegExp(`/${targetAniId}[-.]`);
+    matchedAnime = searchData.results.find(r => 
+      aniRegex.test(r.cover_image?.large || '') || 
+      aniRegex.test(r.banner || '')
+    );
+    if (matchedAnime) console.log(`[${PROVIDER_NAME}] Đã khớp phim qua AniList ID: ${targetAniId}`);
   }
 
   if (!matchedAnime) {
     matchedAnime = searchData.results[0];
-    console.log(`Không khớp được tiêu chí, chọn kết quả đầu tiên: ${matchedAnime.id}`);
+    console.log(`[${PROVIDER_NAME}] Không khớp được ID, chọn kết quả đầu tiên: ${matchedAnime.id}`);
   }
 
+  // 4. Tính toán tập phim và lấy link
   const targetEp = isSeries ? await getAbsoluteEpisode(tmdbId, season, episode) : 1;
   const epTag = isSeries ? `${fullTitle} (Phần ${season})\nTập ${String(episode).padStart(2, '0')}` : fullTitle;
 
@@ -165,15 +128,13 @@ async function getStreams(tmdbId, mediaType, season, episode) {
   const servers = ['kite', 'dio'];
   const types = ['sub', 'dub', 'raw'];
 
-  console.log(`Đang lấy link stream cho Tập: ${targetEp}`);
-
   for (const srv of servers) {
     for (const type of types) {
-      const apiStreamUrl = `${BASE_URL}/anime/oppai/${matchedAnime.id}/${targetEp}?server=${srv}&source_type=${type}`;
+      // Endpoint lấy link stream (oppai)
+      const apiStreamUrl = `https://animetsu.vu/api/v2/anime/oppai/${matchedAnime.id}/${targetEp}?server=${srv}&source_type=${type}`;
       const streamData = await fetchJson(apiStreamUrl, { headers });
       
-      if (streamData && streamData.sources && streamData.sources.length > 0) {
-        console.log(`Tìm thấy link từ Server: ${srv} | Type: ${type}`);
+      if (streamData && streamData.sources) {
         for (const source of streamData.sources) {
           if (source.url) {
             const stream = await makeStream(
@@ -191,7 +152,7 @@ async function getStreams(tmdbId, mediaType, season, episode) {
     }
   }
 
-  console.log(`Hoàn tất. Trả về ${streams.length} link stream.`);
+  console.log(`[${PROVIDER_NAME}] Trả về ${streams.length} nguồn phát.`);
   return streams;
 }
 
