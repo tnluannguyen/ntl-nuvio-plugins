@@ -66,10 +66,10 @@ async function requestWithBypass(url, options, expectJson = false) {
         const bypassOptions = { ...fetchOptions };
         bypassOptions.headers = { ...(fetchOptions.headers || {}), ...(bypassHeaders || {}) };
         const result = await doFetch(bypassOptions);
-        response = result.res;
-        text = result.txt;
-        console.log("[CineFreak] Bypass request status: " + response.status);
-        if (response && response.ok) return text;
+        if (result.res.ok) {
+          console.log("[CineFreak] Bypass successful. Status: " + result.res.status);
+          return result.txt;
+        }
       } catch (e) {
         console.log("[CineFreak] Bypass request failed: " + e.message);
       }
