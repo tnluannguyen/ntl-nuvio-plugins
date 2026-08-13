@@ -1,7 +1,7 @@
 const PROVIDER_NAME = 'CineFreak';
 const BASE_URL = 'https://cinefreak.nl';
 const CINECLOUD_BASE = 'https://cinecloud.pro';
-const TMDB_API_KEY = '439c478a771f35c05022f9feabcca01c';
+const TMDB_API_KEY = 'ca1f881d0bd7bbf9cb3170edd54b52d5';
 
 const MOBILE_UAS = [
   'Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36',
@@ -17,6 +17,7 @@ function getHeaders(userAgent) {
 }
 
 async function fetchText(url, userAgent) {
+  console.log("[CineFreak] Fetching URL: " + url);
   try {
     const controller = new AbortController();
     const id = setTimeout(() => controller.abort(), 6000);
@@ -25,9 +26,11 @@ async function fetchText(url, userAgent) {
       signal: controller.signal
     });
     clearTimeout(id);
+    console.log("[CineFreak] Response status for " + url + ": " + response.status);
     if (!response.ok) return null;
     return await response.text();
   } catch (e) {
+    console.log("[CineFreak] Fetch error for " + url + ": " + e.message);
     return null;
   }
 }
@@ -38,6 +41,7 @@ async function fetchJson(url, userAgent) {
     if (!text) return null;
     return JSON.parse(text);
   } catch (e) {
+    console.log("[CineFreak] JSON parse error for " + url + ": " + e.message);
     return null;
   }
 }
@@ -57,6 +61,7 @@ function extractFslUrl(html) {
   while ((match = regex.exec(html)) !== null) {
     const url = match[1] || match[2] || match[3] || match[4];
     if (url && !url.includes('cinecloud.pro')) {
+      console.log("[CineFreak] Extracted FSL URL via regex: " + url);
       return url.replace(/&amp;/g, '&');
     }
   }
@@ -67,9 +72,11 @@ function extractFslUrl(html) {
     const endIdx = html.indexOf('"', startIdx + startStr.length);
     if (endIdx !== -1) {
       let url = html.substring(startIdx + startStr.length, endIdx);
+      console.log("[CineFreak] Extracted FSL URL via window.location: " + url);
       return url.replace(/&amp;/g, '&');
     }
   }
+  console.log("[CineFreak] Failed to extract FSL URL from HTML.");
   return null;
 }
 
@@ -85,8 +92,12 @@ function decodeGenerateUrl(encoded) {
 async function searchCinefreak(query, userAgent) {
   if (!query) return [];
   const url = `${BASE_URL}/wp-json/wp/v2/search?search=${encodeURIComponent(query)}&per_page=10`;
+  console.log("[CineFreak] Searching CineFreak: " + url);
   const data = await fetchJson(url, userAgent);
-  if (!data || !Array.isArray(data)) return [];
+  if (!data || !Array.isArray(data)) {
+    console.log("[CineFreak] Search returned invalid data.");
+    return [];
+  }
   
   const results = [];
   for (let i = 0; i < data.length; i++) {
@@ -98,6 +109,7 @@ async function searchCinefreak(query, userAgent) {
       url: item.url
     });
   }
+  console.log("[CineFreak] Search found " + results.length + " results.");
   return results;
 }
 
@@ -107,14 +119,15 @@ async function getTMDBInfo(tmdbId, type, userAgent) {
     ? `https://api.themoviedb.org/3/tv/${tmdbId}?api_key=${TMDB_API_KEY}`
     : `https://api.themoviedb.org/3/movie/${tmdbId}?api_key=${TMDB_API_KEY}`;
     
+  console.log("[CineFreak] Fetching TMDB URL: " + url);
   const data = await fetchJson(url, userAgent);
   if (!data) return null;
   
-  return {
-    title: isTv ? data.name : data.title,
-    year: isTv ? (data.first_air_date || '').substring(0, 4) : (data.release_date || '').substring(0, 4),
-    isTv: isTv
-  };
+  const title = isTv ? data.name : data.title;
+  const year = isTv ? (data.first_air_date || '').substring(0, 4) : (data.release_date || '').substring(0, 4);
+  console.log("[CineFreak] TMDB Details extracted: " + title + " (" + year + ")");
+  
+  return { title, year, isTv };
 }
 
 function matchByTitleYear(targetTitle, targetYear, results, season) {
@@ -140,25 +153,31 @@ function matchByTitleYear(targetTitle, targetYear, results, season) {
       if (!item || !item.title) continue;
       if (seasonRegex.test(item.title)) {
         const score = getScore(item) + 10;
+        console.log("[CineFreak] Comparing '" + item.title + "' with '" + targetTitle + "' (Score: " + score + ")");
         if (score > highestScore) {
           highestScore = score;
           bestMatch = item;
         }
       }
     }
-    if (bestMatch) return bestMatch;
+    if (bestMatch) {
+      console.log("[CineFreak] Best match score: " + highestScore);
+      return bestMatch;
+    }
   }
 
   for (let i = 0; i < results.length; i++) {
     const item = results[i];
     if (!item || !item.title) continue;
     const score = getScore(item);
+    console.log("[CineFreak] Comparing '" + item.title + "' with '" + targetTitle + "' (Score: " + score + ")");
     if (score > highestScore) {
       highestScore = score;
       bestMatch = item;
     }
   }
 
+  console.log("[CineFreak] Best match score: " + highestScore);
   return highestScore >= 3 ? bestMatch : null;
 }
 
@@ -202,9 +221,11 @@ function extractMovieQualities(html) {
     }
     
     if (!exists) {
+      console.log("[CineFreak] Extracted movie quality: " + quality + " | Label: " + label);
       qualities.push({ encodedId, decodedUrl, label, quality });
     }
   }
+  console.log("[CineFreak] Total movie qualities extracted: " + qualities.length);
   return qualities;
 }
 
@@ -266,7 +287,10 @@ function extractEpisodeQualities(html, episodeNum) {
     }
   }
   
-  if (!targetPart) return [];
+  if (!targetPart) {
+    console.log("[CineFreak] Target episode " + episodeNum + " not found in HTML.");
+    return [];
+  }
   
   const links = extractAllGenerateLinks(targetPart);
   const qualities = [];
@@ -285,6 +309,7 @@ function extractEpisodeQualities(html, episodeNum) {
     }
     
     if (!exists) {
+      console.log("[CineFreak] Extracted episode quality: " + quality);
       qualities.push({
         encodedId: link.encodedId,
         decodedUrl: link.decodedUrl,
@@ -293,6 +318,7 @@ function extractEpisodeQualities(html, episodeNum) {
       });
     }
   }
+  console.log("[CineFreak] Total episode qualities extracted: " + qualities.length);
   return qualities;
 }
 
@@ -328,6 +354,7 @@ async function resolveFslUrl(url, userAgent) {
   if (!hash) return null;
   
   const cinecloudUrl = `${CINECLOUD_BASE}/f/${hash}`;
+  console.log("[CineFreak] Resolving FSL URL from: " + cinecloudUrl);
   const html = await fetchText(cinecloudUrl, userAgent);
   if (!html) return null;
   
@@ -335,35 +362,52 @@ async function resolveFslUrl(url, userAgent) {
 }
 
 async function getStreams(tmdbId, type, season, episode) {
+  console.log(`[CineFreak] getStreams called. TMDB: ${tmdbId} | Type: ${type} | S${season}E${episode}`);
   try {
     const isTv = type === 'tv' || type === 'series';
     const userAgent = MOBILE_UAS[0];
     
     const tmdbInfo = await getTMDBInfo(tmdbId, type, userAgent);
-    if (!tmdbInfo || !tmdbInfo.title) return [];
+    if (!tmdbInfo || !tmdbInfo.title) {
+      console.log("[CineFreak] Failed to get TMDB info.");
+      return [];
+    }
     
     const targetSeason = isTv ? parseInt(season, 10) || 1 : null;
     let searchResults = await searchCinefreak(tmdbInfo.title, userAgent);
     
     if (!searchResults || searchResults.length < 3) {
+      console.log("[CineFreak] Few results, trying extended search with year.");
       const extendedResults = await searchCinefreak(`${tmdbInfo.title} ${tmdbInfo.year}`, userAgent);
       if (extendedResults && extendedResults.length) {
         searchResults = extendedResults;
       }
     }
     
-    if (!searchResults || !searchResults.length) return [];
+    if (!searchResults || !searchResults.length) {
+      console.log("[CineFreak] No search results found.");
+      return [];
+    }
     
     const match = matchByTitleYear(tmdbInfo.title, tmdbInfo.year, searchResults, targetSeason);
-    if (!match) return [];
+    if (!match) {
+      console.log("[CineFreak] No confident matches found.");
+      return [];
+    }
+    
+    console.log(`[CineFreak] Selected match: "${match.title}"`);
     
     let postUrl = match.url;
     if (!postUrl.startsWith('http')) {
       postUrl = postUrl.startsWith('/') ? BASE_URL + postUrl : BASE_URL + '/' + postUrl;
     }
     
+    console.log("[CineFreak] Fetching post page: " + postUrl);
     const postHtml = await fetchText(postUrl, userAgent);
-    if (!postHtml) return [];
+    if (!postHtml) {
+      console.log("[CineFreak] Failed to fetch post page.");
+      return [];
+    }
     
     let qualities = [];
     if (isTv) {
@@ -373,10 +417,16 @@ async function getStreams(tmdbId, type, season, episode) {
       qualities = extractMovieQualities(postHtml);
     }
     
-    if (!qualities || !qualities.length) return [];
+    if (!qualities || !qualities.length) {
+      console.log("[CineFreak] No qualities extracted.");
+      return [];
+    }
     
     const filteredQualities = filterQualities(qualities);
-    if (!filteredQualities.length) return [];
+    if (!filteredQualities.length) {
+      console.log("[CineFreak] No qualities left after filtering.");
+      return [];
+    }
     
     const finalStreams = [];
     for (let i = 0; i < filteredQualities.length; i++) {
@@ -384,6 +434,7 @@ async function getStreams(tmdbId, type, season, episode) {
       const directUrl = await resolveFslUrl(q.decodedUrl, userAgent);
       
       if (directUrl) {
+        console.log("[CineFreak] Successfully resolved direct URL for " + q.quality);
         finalStreams.push({
           name: PROVIDER_NAME,
           title: `${tmdbInfo.title}\n${q.quality} | CineFreak`,
@@ -394,11 +445,15 @@ async function getStreams(tmdbId, type, season, episode) {
             'User-Agent': userAgent
           }
         });
+      } else {
+        console.log("[CineFreak] Failed to resolve direct URL for " + q.quality);
       }
     }
     
+    console.log(`[CineFreak] Returning ${finalStreams.length} final streams.`);
     return finalStreams;
   } catch (e) {
+    console.log(`[CineFreak] Global Error: ${e.message}`);
     return [];
   }
 }
