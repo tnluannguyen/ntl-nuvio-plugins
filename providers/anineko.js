@@ -171,6 +171,10 @@ function extractStreamsFromEpisode(episodeUrl) {
         var priority = 99;
         var extractor;
 
+        var embedMatch = vUrl.match(/^https?:\/\/([^\/]+)/i);
+        var embedReferer = embedMatch ? embedMatch[0] + "/" : (BASE_URL + "/");
+        var embedOrigin = embedMatch ? embedMatch[0] : BASE_URL;
+
         if (sName === "HD-1" || sName === "HD-2") {
           priority = sName === "HD-1" ? 1 : 2;
           extractor = extractVibeplayer(vUrl);
@@ -189,7 +193,13 @@ function extractStreamsFromEpisode(episodeUrl) {
                 console.log("[AniNeko] Extractor returned null for " + sName);
                 return null;
               }
-              return { serverName: sName, priority: priority, streamUrl: streamUrl };
+              return { 
+                serverName: sName, 
+                priority: priority, 
+                streamUrl: streamUrl,
+                referer: embedReferer,
+                origin: embedOrigin
+              };
             })
             .catch(function(err) {
               console.log("[AniNeko] Extractor error for " + sName + ": " + err.message);
@@ -207,7 +217,12 @@ function extractStreamsFromEpisode(episodeUrl) {
 
       var streams = [];
       valid.forEach(function(s) {
-        streams.push({ serverName: s.serverName, streamUrl: s.streamUrl });
+        streams.push({ 
+          serverName: s.serverName, 
+          streamUrl: s.streamUrl,
+          referer: s.referer,
+          origin: s.origin
+        });
       });
 
       console.log("[AniNeko] Successfully extracted " + streams.length + " streams.");
@@ -331,7 +346,8 @@ function getStreams(tmdbId, mediaType, season, episode) {
             url: s.streamUrl,
             headers: {
               "User-Agent": DEFAULT_HEADERS["User-Agent"],
-              "Referer": BASE_URL + "/"
+              "Referer": s.referer,
+              "Origin": s.origin
             }
           };
         });
