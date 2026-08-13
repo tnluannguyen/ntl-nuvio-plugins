@@ -1,7 +1,7 @@
 const PROVIDER_NAME = 'CineFreak';
 const BASE_URL = 'https://cinefreak.nl';
 const CINECLOUD_BASE = 'https://cinecloud.pro';
-const TMDB_API_KEY = '439c478a771f35c05022f9feabcca01c';
+const TMDB_API_KEY = 'ca1f881d0bd7bbf9cb3170edd54b52d5';
 
 const MOBILE_UAS = [
   'Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36',
@@ -21,36 +21,27 @@ async function fetchText(url, userAgent) {
   try {
     const controller = new AbortController();
     const id = setTimeout(() => controller.abort(), 6000);
-    const response = await fetch(url, {
+    let options = {
       headers: getHeaders(userAgent || MOBILE_UAS[0]),
       signal: controller.signal
-    });
-    clearTimeout(id);
+    };
     
-    const text = await response.text();
+    let response = await fetch(url, options);
     
-    // Kiểm tra Cloudflare
-    if (response.status === 403 || response.status === 503 || text.includes('Just a moment...')) {
-      throw new Error("Cloudflare challenge detected");
+    // Cơ chế vượt Cloudflare nguyên bản
+    if ((response.status === 403 || response.status === 503) && typeof globalThis.Cloudflare !== 'undefined' && globalThis.Cloudflare.bypass) {
+      console.log("[CineFreak] Cloudflare detected (403/503). Attempting bypass...");
+      const bypassHeaders = await globalThis.Cloudflare.bypass(url);
+      options.headers = { ...options.headers, ...(bypassHeaders || {}) };
+      response = await fetch(url, options);
     }
     
+    clearTimeout(id);
     console.log("[CineFreak] Response status for " + url + ": " + response.status);
     if (!response.ok) return null;
-    return text;
+    return await response.text();
   } catch (e) {
     console.log("[CineFreak] Fetch error for " + url + ": " + e.message);
-    
-    // Fallback sang FlareSolverr
-    if (typeof flareFetch !== 'undefined') {
-      console.log("[CineFreak] Attempting flareFetch fallback for: " + url);
-      const flareRes = await flareFetch(url, 15000);
-      if (flareRes && flareRes.text) {
-        console.log("[CineFreak] flareFetch successful.");
-        return flareRes.text;
-      } else {
-        console.log("[CineFreak] flareFetch failed.");
-      }
-    }
     return null;
   }
 }
