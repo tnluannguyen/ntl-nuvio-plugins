@@ -1,7 +1,7 @@
 const PROVIDER_NAME = 'CineFreak';
 const BASE_URL = 'https://cinefreak.nl';
 const CINECLOUD_BASE = 'https://cinecloud.pro';
-const TMDB_API_KEY = 'ca1f881d0bd7bbf9cb3170edd54b52d5';
+const TMDB_API_KEY = '439c478a771f35c05022f9feabcca01c';
 
 const MOBILE_UAS = [
   'Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36',
@@ -26,11 +26,31 @@ async function fetchText(url, userAgent) {
       signal: controller.signal
     });
     clearTimeout(id);
+    
+    const text = await response.text();
+    
+    // Kiểm tra Cloudflare
+    if (response.status === 403 || response.status === 503 || text.includes('Just a moment...')) {
+      throw new Error("Cloudflare challenge detected");
+    }
+    
     console.log("[CineFreak] Response status for " + url + ": " + response.status);
     if (!response.ok) return null;
-    return await response.text();
+    return text;
   } catch (e) {
     console.log("[CineFreak] Fetch error for " + url + ": " + e.message);
+    
+    // Fallback sang FlareSolverr
+    if (typeof flareFetch !== 'undefined') {
+      console.log("[CineFreak] Attempting flareFetch fallback for: " + url);
+      const flareRes = await flareFetch(url, 15000);
+      if (flareRes && flareRes.text) {
+        console.log("[CineFreak] flareFetch successful.");
+        return flareRes.text;
+      } else {
+        console.log("[CineFreak] flareFetch failed.");
+      }
+    }
     return null;
   }
 }
