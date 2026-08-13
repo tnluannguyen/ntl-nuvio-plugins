@@ -184,7 +184,10 @@ async function findCastleMovieId(securityKey, tmdbInfo) {
   const searchResult = await searchCastle(securityKey, searchTerm);
   const data = extractDataBlock(searchResult);
   const rows = data.rows || [];
-  if (rows.length === 0) throw new Error("Không tìm thấy kết quả trên Castle.");
+  if (rows.length === 0) {
+    console.log("[Castle] Không tìm thấy kết quả trên Castle.");
+    return null;
+  }
   
   for (const item of rows) {
     const itemTitle = (item.title || item.name || "").toLowerCase();
@@ -203,7 +206,8 @@ async function findCastleMovieId(securityKey, tmdbInfo) {
     console.log(`[Castle] Dùng kết quả đầu tiên: ${firstItem.title || firstItem.name} (ID: ${movieId})`);
     return movieId.toString();
   }
-  throw new Error("Không thể trích xuất Movie ID từ kết quả tìm kiếm.");
+  console.log("[Castle] Không thể trích xuất Movie ID từ kết quả tìm kiếm.");
+  return null;
 }
 
 function getQualityValue(quality) {
@@ -279,6 +283,12 @@ async function getStreams(tmdbId, mediaType, seasonNum, episodeNum, payload) {
     
     const securityKey = await getSecurityKey();
     const movieId = await findCastleMovieId(securityKey, tmdbInfo);
+    
+    if (!movieId) {
+      console.log("[Castle] Bỏ qua vì không tìm thấy Movie ID.");
+      return [];
+    }
+
     let details = await getDetails(securityKey, movieId);
     let currentMovieId = movieId;
     
@@ -304,7 +314,10 @@ async function getStreams(tmdbId, mediaType, seasonNum, episodeNum, payload) {
       episodeId = episodes[0].id.toString();
     }
     
-    if (!episodeId) throw new Error("Không tìm thấy Episode ID.");
+    if (!episodeId) {
+      console.log("[Castle] Không tìm thấy Episode ID (Phim chưa có luồng phát).");
+      return [];
+    }
     
     const episode = episodes.find((e) => e.id.toString() === episodeId);
     const tracks = episode && episode.tracks || [];
