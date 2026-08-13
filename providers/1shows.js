@@ -4,7 +4,7 @@ const PROVIDER_NAME = '1Shows';
 const SITE_URL = 'https://www.1shows.org';
 const API_URL = 'https://1shows.org/api';
 const TMDB_URL = 'https://api.themoviedb.org/3';
-const TMDB_API_KEY = 'ca1f881d0bd7bbf9cb3170edd54b52d5';
+const TMDB_API_KEY = '439c478a771f35c05022f9feabcca01c';
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 const DOWNLOAD_KEY_HEX = '7a03086357a2147dab4d757e8ed2ff8b5dc8707ee3d473afcb80d97727afa191';
 
@@ -17,10 +17,38 @@ const API_HEADERS = {
 
 async function fetchJson(url, options) {
   console.log("[1Shows] Fetching JSON URL: " + url);
-  const response = await fetch(url, options);
-  console.log("[1Shows] Response status for " + url + ": " + response.status);
-  if (!response.ok) return null;
-  return await response.json();
+  try {
+    const response = await fetch(url, options);
+    const text = await response.text();
+    
+    // Kiểm tra nếu bị Cloudflare chặn (trả về HTML thay vì JSON)
+    if (text.trim().startsWith('<')) {
+      throw new Error("Cloudflare HTML challenge detected");
+    }
+    
+    console.log("[1Shows] Response status for " + url + ": " + response.status);
+    if (!response.ok) return null;
+    return JSON.parse(text);
+  } catch (e) {
+    console.log("[1Shows] Standard fetch failed: " + e.message);
+    
+    // Fallback sang FlareSolverr nếu có sẵn trong Sandbox
+    if (typeof flareFetch !== 'undefined') {
+      console.log("[1Shows] Attempting flareFetch fallback for: " + url);
+      const flareRes = await flareFetch(url, 15000);
+      if (flareRes && flareRes.text && !flareRes.text.trim().startsWith('<')) {
+        try {
+          console.log("[1Shows] flareFetch successful.");
+          return JSON.parse(flareRes.text);
+        } catch (err) {
+          console.log("[1Shows] flareFetch JSON parse error: " + err.message);
+        }
+      } else {
+        console.log("[1Shows] flareFetch failed or returned HTML.");
+      }
+    }
+    return null;
+  }
 }
 
 function decryptPayload(encryptedData, tokenHex) {
