@@ -20,7 +20,6 @@ async function requestWithBypass(url, options, expectJson = false) {
   let text = null;
   let needsBypass = false;
 
-  // Bổ sung các cờ quan trọng từ mã gốc
   const fetchOptions = Object.assign({}, options, {
     cfKiller: true,
     skipSizeCheck: true
@@ -58,26 +57,28 @@ async function requestWithBypass(url, options, expectJson = false) {
     needsBypass = true;
   }
 
-  if (needsBypass && typeof globalThis.Cloudflare !== 'undefined' && globalThis.Cloudflare.bypass) {
-    console.log("[1Shows] Executing Cloudflare bypass for: " + url);
-    try {
-      const bypassHeaders = await globalThis.Cloudflare.bypass(url);
-      const bypassOptions = { ...fetchOptions };
-      bypassOptions.headers = { ...(fetchOptions.headers || {}), ...(bypassHeaders || {}) };
-      const result = await doFetch(bypassOptions);
-      response = result.res;
-      text = result.txt;
-      console.log("[1Shows] Bypass request status: " + response.status);
-    } catch (e) {
-      console.log("[1Shows] Bypass request failed: " + e.message);
-      return null;
+  if (needsBypass) {
+    if (typeof Cloudflare !== 'undefined' && Cloudflare.bypass) {
+      console.log("[1Shows] Executing Cloudflare bypass for: " + url);
+      try {
+        const bypassHeaders = await Cloudflare.bypass(url);
+        const bypassOptions = { ...fetchOptions };
+        bypassOptions.headers = { ...(fetchOptions.headers || {}), ...(bypassHeaders || {}) };
+        const result = await doFetch(bypassOptions);
+        response = result.res;
+        text = result.txt;
+        console.log("[1Shows] Bypass request status: " + response.status);
+        if (response && response.ok) return text;
+      } catch (e) {
+        console.log("[1Shows] Bypass request failed: " + e.message);
+      }
+    } else {
+      console.log("[1Shows] Bypass required but Cloudflare.bypass is missing.");
     }
+    return null;
   }
 
-  if (response && response.ok && text) {
-    return text;
-  }
-  return null;
+  return (response && response.ok) ? text : null;
 }
 
 async function fetchJson(url, options) {
@@ -227,7 +228,7 @@ async function getStreams(tmdbId, type, season, episode) {
     ]);
 
     if (!sources || sources.length === 0) {
-      console.log("[1Shows] No sources returned từ fetchDownloadSources.");
+      console.log("[1Shows] No sources returned from fetchDownloadSources.");
       return [];
     }
 
