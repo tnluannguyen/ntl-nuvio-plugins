@@ -51,6 +51,9 @@ async function requestWithBypass(url, options, expectJson = false) {
     } else if (expectJson && text.trim().startsWith('<')) {
       console.log("[1Shows] Sneaky Cloudflare 200 OK (HTML instead of JSON) detected.");
       needsBypass = true;
+    } else if (!expectJson && (text.includes('Just a moment...') || text.includes('cf-browser-verification'))) {
+      console.log("[1Shows] Cloudflare HTML challenge detected.");
+      needsBypass = true;
     }
   } catch (e) {
     console.log("[1Shows] Fetch failed (" + e.message + "). Flagging for bypass.");
@@ -65,17 +68,17 @@ async function requestWithBypass(url, options, expectJson = false) {
         const bypassOptions = { ...fetchOptions };
         bypassOptions.headers = { ...(fetchOptions.headers || {}), ...(bypassHeaders || {}) };
         const result = await doFetch(bypassOptions);
-        response = result.res;
-        text = result.txt;
-        console.log("[1Shows] Bypass request status: " + response.status);
-        if (response && response.ok) return text;
+        if (result.res.ok) {
+          console.log("[1Shows] Bypass successful. Status: " + result.res.status);
+          return result.txt;
+        }
       } catch (e) {
         console.log("[1Shows] Bypass request failed: " + e.message);
       }
     } else {
       console.log("[1Shows] Bypass required but Cloudflare.bypass is missing.");
     }
-    return null;
+    return null; // Trả về null nếu cần bypass mà không thành công, tránh parse HTML rác
   }
 
   return (response && response.ok) ? text : null;
