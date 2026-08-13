@@ -16,43 +16,81 @@ function getHeaders(userAgent) {
   };
 }
 
-async function fetchText(url, userAgent) {
-  console.log("[CineFreak] Fetching URL: " + url);
-  try {
+async function requestWithBypass(url, options, expectJson = false) {
+  let response;
+  let text = null;
+  let needsBypass = false;
+
+  const doFetch = async (fetchOpts) => {
     const controller = new AbortController();
-    const id = setTimeout(() => controller.abort(), 6000);
-    let options = {
-      headers: getHeaders(userAgent || MOBILE_UAS[0]),
-      signal: controller.signal
-    };
-    
-    let response = await fetch(url, options);
-    
-    // Cơ chế vượt Cloudflare nguyên bản
-    if ((response.status === 403 || response.status === 503) && typeof globalThis.Cloudflare !== 'undefined' && globalThis.Cloudflare.bypass) {
-      console.log("[CineFreak] Cloudflare detected (403/503). Attempting bypass...");
-      const bypassHeaders = await globalThis.Cloudflare.bypass(url);
-      options.headers = { ...options.headers, ...(bypassHeaders || {}) };
-      response = await fetch(url, options);
+    const id = setTimeout(() => controller.abort(), 8000);
+    try {
+      const res = await fetch(url, { ...fetchOpts, signal: controller.signal });
+      const txt = await res.text();
+      clearTimeout(id);
+      return { res, txt };
+    } catch (e) {
+      clearTimeout(id);
+      throw e;
     }
-    
-    clearTimeout(id);
-    console.log("[CineFreak] Response status for " + url + ": " + response.status);
-    if (!response.ok) return null;
-    return await response.text();
+  };
+
+  try {
+    console.log("[CineFreak] Fetching URL: " + url);
+    const result = await doFetch(options);
+    response = result.res;
+    text = result.txt;
+
+    if (response.status === 403 || response.status === 503) {
+      console.log("[CineFreak] Cloudflare 403/503 detected.");
+      needsBypass = true;
+    } else if (expectJson && text.trim().startsWith('<')) {
+      console.log("[CineFreak] Sneaky Cloudflare 200 OK (HTML instead of JSON) detected.");
+      needsBypass = true;
+    } else if (!expectJson && (text.includes('Just a moment...') || text.includes('cf-browser-verification'))) {
+      console.log("[CineFreak] Cloudflare HTML challenge detected.");
+      needsBypass = true;
+    }
   } catch (e) {
-    console.log("[CineFreak] Fetch error for " + url + ": " + e.message);
-    return null;
+    console.log("[CineFreak] Fetch failed (" + e.message + "). Flagging for bypass.");
+    needsBypass = true;
   }
+
+  if (needsBypass && typeof globalThis.Cloudflare !== 'undefined' && globalThis.Cloudflare.bypass) {
+    console.log("[CineFreak] Executing Cloudflare bypass for: " + url);
+    try {
+      const bypassHeaders = await globalThis.Cloudflare.bypass(url);
+      const newOptions = { ...options };
+      newOptions.headers = { ...(options.headers || {}), ...(bypassHeaders || {}) };
+      const result = await doFetch(newOptions);
+      response = result.res;
+      text = result.txt;
+      console.log("[CineFreak] Bypass request status: " + response.status);
+    } catch (e) {
+      console.log("[CineFreak] Bypass request failed: " + e.message);
+      return null;
+    }
+  }
+
+  if (response && response.ok && text) {
+    return text;
+  }
+  return null;
+}
+
+async function fetchText(url, userAgent) {
+  const options = { headers: getHeaders(userAgent || MOBILE_UAS[0]) };
+  return await requestWithBypass(url, options, false);
 }
 
 async function fetchJson(url, userAgent) {
+  const options = { headers: getHeaders(userAgent || MOBILE_UAS[0]) };
+  const text = await requestWithBypass(url, options, true);
+  if (!text) return null;
   try {
-    const text = await fetchText(url, userAgent);
-    if (!text) return null;
     return JSON.parse(text);
   } catch (e) {
-    console.log("[CineFreak] JSON parse error for " + url + ": " + e.message);
+    console.log("[CineFreak] JSON parse error: " + e.message);
     return null;
   }
 }
