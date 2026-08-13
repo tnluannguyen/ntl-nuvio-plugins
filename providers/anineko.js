@@ -1,6 +1,5 @@
 var PROVIDER_NAME = "AniNeko";
 var BASE_URL = "https://anineko.to";
-var TMDB_KEY = "1c29a5198ee1854bd5eb45dbe8d17d92";
 
 var DEFAULT_HEADERS = {
   "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36",
@@ -16,28 +15,6 @@ function fetchText(url, options) {
       console.log("[AniNeko] Response status for " + url + ": " + res.status);
       if (!res.ok) throw new Error("HTTP " + res.status);
       return res.text();
-    });
-}
-
-function getTMDBTitle(tmdbId, mediaType) {
-  var type = mediaType === "movie" ? "movie" : "tv";
-  var url = "https://api.themoviedb.org/3/" + type + "/" + tmdbId + "?api_key=" + TMDB_KEY;
-  console.log("[AniNeko] TMDB Request: " + url);
-
-  return fetch(url)
-    .then(function(r) { return r.json(); })
-    .then(function(data) {
-      var res = {
-        title: data.name || data.title || "",
-        originalTitle: data.original_name || data.original_title || "",
-        year: (data.first_air_date || data.release_date || "").split("-")[0]
-      };
-      console.log("[AniNeko] TMDB Result: Title=" + res.title + ", Original=" + res.originalTitle + ", Year=" + res.year);
-      return res;
-    })
-    .catch(function(err) {
-      console.log("[AniNeko] TMDB Error: " + err.message);
-      return { title: "", originalTitle: "", year: "" };
     });
 }
 
@@ -78,13 +55,14 @@ function titleScore(a, b) {
   return Math.round((matched / Math.max(wa.length, wb.length)) * 60);
 }
 
-function findBestMatch(results, title, originalTitle) {
+function findBestMatch(results, titleRomaji, titleEnglish) {
   var best = null;
   var bestScore = 0;
   results.forEach(function(r) {
-    var s1 = titleScore(r.title, title);
-    var s2 = titleScore(r.title, originalTitle);
+    var s1 = titleRomaji ? titleScore(r.title, titleRomaji) : 0;
+    var s2 = titleEnglish ? titleScore(r.title, titleEnglish) : 0;
     var s = Math.max(s1, s2);
+    console.log("[AniNeko] Comparing '" + r.title + "' with Romaji:'" + titleRomaji + "' (Score: " + s1 + ") and English:'" + titleEnglish + "' (Score: " + s2 + ")");
     if (s > bestScore) { bestScore = s; best = r; }
   });
   console.log("[AniNeko] Best match score: " + bestScore);
@@ -146,6 +124,50 @@ function extractPacker(videoUrl) {
   });
 }
 
+function resolveHighestQuality(masterUrl, referer) {
+  console.log("[AniNeko] Resolving highest quality for: " + masterUrl);
+  return fetchText(masterUrl, { headers: { "Referer": referer, "Origin": referer.replace(/\/$/, '') } })
+    .then(function(text) {
+      var lines = text.split('\n');
+      var bestStream = null;
+      var maxScore = 0;
+      var currentScore = 0;
+      for (var i = 0; i < lines.length; i++) {
+        var line = lines[i].trim();
+        if (line.startsWith('#EXT-X-STREAM-INF')) {
+          var resMatch = line.match(/RESOLUTION=(\d+)x(\d+)/);
+          if (resMatch) {
+            currentScore = parseInt(resMatch[1], 10) * parseInt(resMatch[2], 10);
+          } else {
+            var bwMatch = line.match(/BANDWIDTH=(\d+)/);
+            if (bwMatch) currentScore = parseInt(bwMatch[1], 10);
+          }
+        } else if (line && !line.startsWith('#')) {
+          if (currentScore > maxScore) {
+            maxScore = currentScore;
+            bestStream = line;
+          }
+          currentScore = 0;
+        }
+      }
+      if (bestStream) {
+        var finalUrl = bestStream;
+        if (!bestStream.startsWith('http')) {
+          var baseUrl = masterUrl.substring(0, masterUrl.lastIndexOf('/') + 1);
+          finalUrl = baseUrl + bestStream;
+        }
+        console.log("[AniNeko] Resolved highest quality stream: " + finalUrl);
+        return finalUrl;
+      }
+      console.log("[AniNeko] Could not parse streams, returning master URL.");
+      return masterUrl;
+    })
+    .catch(function(err) {
+      console.log("[AniNeko] Failed to resolve highest quality: " + err.message);
+      return masterUrl;
+    });
+}
+
 function extractStreamsFromEpisode(episodeUrl) {
   console.log("[AniNeko] Extracting streams from episode: " + episodeUrl);
   return fetchText(episodeUrl).then(function(html) {
@@ -193,13 +215,15 @@ function extractStreamsFromEpisode(episodeUrl) {
                 console.log("[AniNeko] Extractor returned null for " + sName);
                 return null;
               }
-              return { 
-                serverName: sName, 
-                priority: priority, 
-                streamUrl: streamUrl,
-                referer: embedReferer,
-                origin: embedOrigin
-              };
+              return resolveHighestQuality(streamUrl, embedReferer).then(function(bestUrl) {
+                return { 
+                  serverName: sName, 
+                  priority: priority, 
+                  streamUrl: bestUrl,
+                  referer: embedReferer,
+                  origin: embedOrigin
+                };
+              });
             })
             .catch(function(err) {
               console.log("[AniNeko] Extractor error for " + sName + ": " + err.message);
@@ -294,35 +318,37 @@ function unpack(source) {
   });
 }
 
-function getStreams(tmdbId, mediaType, season, episode) {
+function getStreams(tmdbId, mediaType, season, episode, payload) {
   var ep = episode || 1;
-  console.log("[AniNeko] getStreams called with TMDB: " + tmdbId + ", Type: " + mediaType + ", S" + season + "E" + ep);
+  var p = payload || {};
+  var titleRomaji = p.romaji || "";
+  var titleEnglish = p.english || p.title || "";
+  
+  var searchTitle = titleRomaji || titleEnglish;
+  if (!searchTitle) {
+     console.log("[AniNeko] No title available for searching.");
+     return Promise.resolve([]);
+  }
 
-  return getTMDBTitle(tmdbId, mediaType).then(function(info) {
-    if (!info.title) {
-      console.log("[AniNeko] Failed to get TMDB title.");
-      throw new Error("Could not resolve title from TMDB");
+  console.log("[AniNeko] getStreams called. S" + season + "E" + ep + " | Romaji: " + titleRomaji + " | English: " + titleEnglish);
+
+  return searchAniNeko(searchTitle).then(function(results) {
+    if (results.length === 0 && titleRomaji && titleEnglish && titleRomaji !== titleEnglish) {
+      console.log("[AniNeko] No results for Romaji, falling back to English: " + titleEnglish);
+      return searchAniNeko(titleEnglish).then(function(r2) {
+        return { results: r2 };
+      });
     }
-
-    return searchAniNeko(info.title).then(function(results) {
-      if (results.length === 0 && info.originalTitle && info.originalTitle !== info.title) {
-        console.log("[AniNeko] No results for English title, trying original title: " + info.originalTitle);
-        return searchAniNeko(info.originalTitle).then(function(r2) {
-          return { results: r2, info: info };
-        });
-      }
-      return { results: results, info: info };
-    });
+    return { results: results };
   }).then(function(data) {
     var results = data.results;
-    var info    = data.info;
 
     if (results.length === 0) {
       console.log("[AniNeko] Search returned 0 results overall.");
       throw new Error("No search results found");
     }
 
-    var match = findBestMatch(results, info.title, info.originalTitle);
+    var match = findBestMatch(results, titleRomaji, titleEnglish);
     if (!match) {
       console.log("[AniNeko] No strong match found, falling back to first result: " + results[0].title);
       match = results[0];
