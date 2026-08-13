@@ -15,31 +15,70 @@ const API_HEADERS = {
   'User-Agent': USER_AGENT
 };
 
-async function fetchText(url, options) {
-  console.log("[1Shows] Fetching URL: " + url);
+async function requestWithBypass(url, options, expectJson = false) {
+  let response;
+  let text = null;
+  let needsBypass = false;
+
+  const doFetch = async (fetchOpts) => {
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), 8000);
+    try {
+      const res = await fetch(url, { ...fetchOpts, signal: controller.signal });
+      const txt = await res.text();
+      clearTimeout(id);
+      return { res, txt };
+    } catch (e) {
+      clearTimeout(id);
+      throw e;
+    }
+  };
+
   try {
-    let response = await fetch(url, options);
-    
-    // Cơ chế vượt Cloudflare nguyên bản
-    if ((response.status === 403 || response.status === 503) && typeof globalThis.Cloudflare !== 'undefined' && globalThis.Cloudflare.bypass) {
-      console.log("[1Shows] Cloudflare detected (403/503). Attempting bypass...");
+    console.log("[1Shows] Fetching URL: " + url);
+    const result = await doFetch(options);
+    response = result.res;
+    text = result.txt;
+
+    if (response.status === 403 || response.status === 503) {
+      console.log("[1Shows] Cloudflare 403/503 detected.");
+      needsBypass = true;
+    } else if (expectJson && text.trim().startsWith('<')) {
+      console.log("[1Shows] Sneaky Cloudflare 200 OK (HTML instead of JSON) detected.");
+      needsBypass = true;
+    } else if (!expectJson && (text.includes('Just a moment...') || text.includes('cf-browser-verification'))) {
+      console.log("[1Shows] Cloudflare HTML challenge detected.");
+      needsBypass = true;
+    }
+  } catch (e) {
+    console.log("[1Shows] Fetch failed (" + e.message + "). Flagging for bypass.");
+    needsBypass = true;
+  }
+
+  if (needsBypass && typeof globalThis.Cloudflare !== 'undefined' && globalThis.Cloudflare.bypass) {
+    console.log("[1Shows] Executing Cloudflare bypass for: " + url);
+    try {
       const bypassHeaders = await globalThis.Cloudflare.bypass(url);
       const newOptions = { ...options };
       newOptions.headers = { ...(options.headers || {}), ...(bypassHeaders || {}) };
-      response = await fetch(url, newOptions);
+      const result = await doFetch(newOptions);
+      response = result.res;
+      text = result.txt;
+      console.log("[1Shows] Bypass request status: " + response.status);
+    } catch (e) {
+      console.log("[1Shows] Bypass request failed: " + e.message);
+      return null;
     }
-    
-    console.log("[1Shows] Response status for " + url + ": " + response.status);
-    if (!response.ok) return null;
-    return await response.text();
-  } catch (e) {
-    console.log("[1Shows] Fetch error: " + e.message);
-    return null;
   }
+
+  if (response && response.ok && text) {
+    return text;
+  }
+  return null;
 }
 
 async function fetchJson(url, options) {
-  const text = await fetchText(url, options);
+  const text = await requestWithBypass(url, options, true);
   if (!text) return null;
   try {
     return JSON.parse(text);
