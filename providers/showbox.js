@@ -153,13 +153,14 @@ async function extractFebBoxShare(showboxId, mediaType, seasonNum, episodeNum, u
     
     console.log(`[ShowBox] Tìm thấy ${fids.length} file khớp trong FebBox share.`);
     
+    // ĐÃ SỬA: Xóa Range: bytes=0- và thêm Cookie vào videoHeaders
     const videoHeaders = {
       "Accept": "*/*",
       "Accept-Language": "en-US,en;q=0.8",
       "Connection": "keep-alive",
-      "Range": "bytes=0-",
       "Referer": "https://www.febbox.com/",
-      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36",
+      "Cookie": formattedCookie
     };
     
     for (const file of fids) {
