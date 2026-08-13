@@ -1,512 +1,68 @@
 const PROVIDER_NAME = 'CineFreak';
 const BASE_URL = 'https://cinefreak.nl';
 const CINECLOUD_BASE = 'https://cinecloud.pro';
-const TMDB_API_KEY = 'ca1f881d0bd7bbf9cb3170edd54b52d5';
-
-const MOBILE_UAS = [
-  'Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36',
-  'Mozilla/5.0 (Linux; Android 13; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36'
-];
-
-function getHeaders(userAgent) {
-  return {
-    'User-Agent': userAgent,
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-    'Accept-Language': 'en-US,en;q=0.5'
-  };
-}
-
-async function requestWithBypass(url, options, expectJson = false) {
-  let response;
-  let text = null;
-  let needsBypass = false;
-
-  const fetchOptions = Object.assign({}, options, {
-    cfKiller: true,
-    skipSizeCheck: true
-  });
-
-  const doFetch = async (opts) => {
-    const controller = new AbortController();
-    const id = setTimeout(() => controller.abort(), 10000);
-    try {
-      const res = await fetch(url, { ...opts, signal: controller.signal });
-      const txt = await res.text();
-      clearTimeout(id);
-      return { res, txt };
-    } catch (e) {
-      clearTimeout(id);
-      throw e;
-    }
-  };
-
-  try {
-    console.log("[CineFreak] Fetching URL: " + url);
-    const result = await doFetch(fetchOptions);
-    response = result.res;
-    text = result.txt;
-
-    if (response.status === 403 || response.status === 503) {
-      console.log("[CineFreak] Cloudflare 403/503 detected.");
-      needsBypass = true;
-    } else if (text.includes('Just a moment...') || text.includes('cf-browser-verification')) {
-      console.log("[CineFreak] Cloudflare HTML challenge detected.");
-      needsBypass = true;
-    }
-  } catch (e) {
-    console.log("[CineFreak] Fetch failed (" + e.message + "). Flagging for bypass.");
-    needsBypass = true;
-  }
-
-  if (needsBypass) {
-    if (typeof Cloudflare !== 'undefined' && Cloudflare.bypass) {
-      console.log("[CineFreak] Executing Cloudflare bypass for: " + url);
-      try {
-        const bypassHeaders = await Cloudflare.bypass(url);
-        const bypassOptions = { ...fetchOptions };
-        bypassOptions.headers = { ...(fetchOptions.headers || {}), ...(bypassHeaders || {}) };
-        const result = await doFetch(bypassOptions);
-        if (result.res.ok) {
-          console.log("[CineFreak] Bypass successful. Status: " + result.res.status);
-          return result.txt;
-        }
-      } catch (e) {
-        console.log("[CineFreak] Bypass request failed: " + e.message);
-      }
-    } else {
-      console.log("[CineFreak] Bypass required but Cloudflare.bypass is missing.");
-    }
-    return null;
-  }
-
-  return (response && response.ok) ? text : null;
-}
-
-async function fetchText(url, userAgent) {
-  const options = { headers: getHeaders(userAgent || MOBILE_UAS[0]) };
-  return await requestWithBypass(url, options, false);
-}
-
-async function fetchJson(url, userAgent) {
-  const options = { headers: getHeaders(userAgent || MOBILE_UAS[0]) };
-  const text = await requestWithBypass(url, options, true);
-  if (!text) return null;
-  try {
-    return JSON.parse(text);
-  } catch (e) {
-    console.log("[CineFreak] JSON parse error: " + e.message);
-    return null;
-  }
-}
-
-function parseQuality(str) {
-  const lower = String(str || '').toLowerCase();
-  if (lower.includes('2160') || lower.includes('4k')) return '4K';
-  if (lower.includes('1080')) return '1080p';
-  if (lower.includes('720')) return '720p';
-  if (lower.includes('480')) return '480p';
-  return 'HD';
-}
-
-function extractFslUrl(html) {
-  const regex = /href="([^"]+)"[^>]*id="fsl"|href="([^"]+(?:\.workers\.dev|\.r2\.dev|\.buzz|\.cloudflarestorage\.com)\/[^"]+)"|href="(https?:\/\/[^"]+\.(?:mkv|mp4)[^"]*)"|href="(https:\/\/pub-[^"]+)"/ig;
-  let match;
-  while ((match = regex.exec(html)) !== null) {
-    const url = match[1] || match[2] || match[3] || match[4];
-    if (url && !url.includes('cinecloud.pro')) {
-      console.log("[CineFreak] Extracted FSL URL via regex: " + url);
-      return url.replace(/&amp;/g, '&');
-    }
-  }
-  
-  const startStr = 'window.location.href="';
-  const startIdx = html.indexOf(startStr);
-  if (startIdx !== -1) {
-    const endIdx = html.indexOf('"', startIdx + startStr.length);
-    if (endIdx !== -1) {
-      let url = html.substring(startIdx + startStr.length, endIdx);
-      console.log("[CineFreak] Extracted FSL URL via window.location: " + url);
-      return url.replace(/&amp;/g, '&');
-    }
-  }
-  console.log("[CineFreak] Failed to extract FSL URL from HTML.");
-  return null;
-}
-
-function decodeGenerateUrl(encoded) {
-  try {
-    let decoded = atob(encoded);
-    return decoded.replace(/newgo32$/, '');
-  } catch (e) {
-    return null;
-  }
-}
-
-async function searchCinefreak(query, userAgent) {
-  if (!query) return [];
-  const url = `${BASE_URL}/wp-json/wp/v2/search?search=${encodeURIComponent(query)}&per_page=10`;
-  console.log("[CineFreak] Searching CineFreak: " + url);
-  const data = await fetchJson(url, userAgent);
-  if (!data || !Array.isArray(data)) {
-    console.log("[CineFreak] Search returned invalid data.");
-    return [];
-  }
-  
-  const results = [];
-  for (let i = 0; i < data.length; i++) {
-    const item = data[i];
-    if (!item || !item.title || !item.url) continue;
-    results.push({
-      id: item.id,
-      title: String(item.title).replace(/Download\s*/gi, '').trim(),
-      url: item.url
-    });
-  }
-  console.log("[CineFreak] Search found " + results.length + " results.");
-  return results;
-}
-
-async function getTMDBInfo(tmdbId, type, userAgent) {
-  const isTv = type === 'tv' || type === 'series';
-  const url = isTv 
-    ? `https://api.themoviedb.org/3/tv/${tmdbId}?api_key=${TMDB_API_KEY}`
-    : `https://api.themoviedb.org/3/movie/${tmdbId}?api_key=${TMDB_API_KEY}`;
-    
-  console.log("[CineFreak] Fetching TMDB URL: " + url);
-  const data = await fetchJson(url, userAgent);
-  if (!data) return null;
-  
-  const title = isTv ? data.name : data.title;
-  const year = isTv ? (data.first_air_date || '').substring(0, 4) : (data.release_date || '').substring(0, 4);
-  console.log("[CineFreak] TMDB Details extracted: " + title + " (" + year + ")");
-  
-  return { title, year, isTv };
-}
-
-function matchByTitleYear(targetTitle, targetYear, results, season) {
-  if (!results || !results.length) return null;
-  const targetClean = String(targetTitle || '').toLowerCase().trim();
-  
-  function getScore(item) {
-    if (!item) return 0;
-    let score = 0;
-    const itemTitle = String(item.title).toLowerCase();
-    if (itemTitle.includes(targetClean)) score += 10;
-    if (targetYear && itemTitle.includes(String(targetYear))) score += 3;
-    return score;
-  }
-
-  let bestMatch = null;
-  let highestScore = -1;
-
-  if (season) {
-    const seasonRegex = new RegExp(`season\\s*0*${season}\\b`, 'i');
-    for (let i = 0; i < results.length; i++) {
-      const item = results[i];
-      if (!item || !item.title) continue;
-      if (seasonRegex.test(item.title)) {
-        const score = getScore(item) + 10;
-        console.log("[CineFreak] Comparing '" + item.title + "' with '" + targetTitle + "' (Score: " + score + ")");
-        if (score > highestScore) {
-          highestScore = score;
-          bestMatch = item;
-        }
-      }
-    }
-    if (bestMatch) {
-      console.log("[CineFreak] Best match score: " + highestScore);
-      return bestMatch;
-    }
-  }
-
-  for (let i = 0; i < results.length; i++) {
-    const item = results[i];
-    if (!item || !item.title) continue;
-    const score = getScore(item);
-    console.log("[CineFreak] Comparing '" + item.title + "' with '" + targetTitle + "' (Score: " + score + ")");
-    if (score > highestScore) {
-      highestScore = score;
-      bestMatch = item;
-    }
-  }
-
-  console.log("[CineFreak] Best match score: " + highestScore);
-  return highestScore >= 3 ? bestMatch : null;
-}
-
-function extractMovieQualities(html) {
-  if (!html) return [];
-  const qualities = [];
-  const parts = html.split('dlbtn-container');
-  
-  for (let i = 1; i < parts.length; i++) {
-    const current = parts[i];
-    const prev = parts[i - 1];
-    
-    const linkMatch = current.match(/href="(?:https?:\/\/[^"]*?)?\/generate\.php\?id=([a-zA-Z0-9+/=]+)"/);
-    if (!linkMatch) continue;
-    
-    const encodedId = linkMatch[1];
-    const decodedUrl = decodeGenerateUrl(encodedId);
-    if (!decodedUrl || decodedUrl.indexOf('/f/') === -1) continue;
-    
-    let label = '';
-    let labelMatch = prev.match(/<\/span>\s*([^<]*?(?:2160|1080|720|480|4K)[^<]*?\[[^\]]+\])/i);
-    if (!labelMatch) labelMatch = prev.match(/<\/span>\s*([^<]*?(?:2160|1080|720|480|4K)[^<]*?)\s*\[/i);
-    
-    if (labelMatch) label = labelMatch[1].trim();
-    
-    if (!label) {
-      labelMatch = prev.match(/\b(?:4K\s*2160p|UHD|2160p|1080p|720p|480p)\b/i);
-      if (labelMatch) label = labelMatch[0];
-    }
-    
-    if (!label) label = decodedUrl;
-    
-    const quality = parseQuality(label);
-    
-    let exists = false;
-    for (let j = 0; j < qualities.length; j++) {
-      if (qualities[j].decodedUrl === decodedUrl) {
-        exists = true;
-        break;
-      }
-    }
-    
-    if (!exists) {
-      console.log("[CineFreak] Extracted movie quality: " + quality + " | Label: " + label);
-      qualities.push({ encodedId, decodedUrl, label, quality });
-    }
-  }
-  console.log("[CineFreak] Total movie qualities extracted: " + qualities.length);
-  return qualities;
-}
-
-function extractAllGenerateLinks(html) {
-  if (!html) return [];
-  const links = [];
-  let pos = 0;
-  const searchStr = '/generate.php?id=';
-  
-  while (true) {
-    const idx = html.indexOf(searchStr, pos);
-    if (idx === -1) break;
-    
-    const startQuote = html.lastIndexOf('"', idx);
-    if (startQuote === -1 || startQuote < pos) {
-      pos = idx + 1;
-      continue;
-    }
-    
-    const endA = html.indexOf('</a>', idx);
-    if (endA === -1) {
-      pos = idx + 1;
-      continue;
-    }
-    
-    const endQuote = html.indexOf('"', idx);
-    if (endQuote === -1) {
-      pos = endA + 4;
-      continue;
-    }
-    
-    const encodedId = html.substring(idx + searchStr.length, endQuote);
-    const decodedUrl = decodeGenerateUrl(encodedId);
-    
-    links.push({
-      encodedId,
-      decodedUrl: decodedUrl || '',
-      label: 'Episode Link'
-    });
-    
-    pos = endA + 4;
-  }
-  return links;
-}
-
-function extractEpisodeQualities(html, episodeNum) {
-  if (!html) return [];
-  const parts = html.split('accordion-item');
-  let targetPart = null;
-  
-  for (let i = 1; i < parts.length; i++) {
-    const part = parts[i];
-    const epMatch = part.match(/episode-badge[^>]*>Episode\s*(\d+)/i);
-    if (!epMatch) continue;
-    
-    if (parseInt(epMatch[1], 10) === episodeNum) {
-      targetPart = part;
-      break;
-    }
-  }
-  
-  if (!targetPart) {
-    console.log("[CineFreak] Target episode " + episodeNum + " not found in HTML.");
-    return [];
-  }
-  
-  const links = extractAllGenerateLinks(targetPart);
-  const qualities = [];
-  
-  for (let i = 0; i < links.length; i++) {
-    const link = links[i];
-    if (!link.decodedUrl || link.decodedUrl.indexOf('/f/') === -1) continue;
-    
-    const quality = parseQuality(link.decodedUrl);
-    let exists = false;
-    for (let j = 0; j < qualities.length; j++) {
-      if (qualities[j].decodedUrl === link.decodedUrl) {
-        exists = true;
-        break;
-      }
-    }
-    
-    if (!exists) {
-      console.log("[CineFreak] Extracted episode quality: " + quality);
-      qualities.push({
-        encodedId: link.encodedId,
-        decodedUrl: link.decodedUrl,
-        label: quality,
-        quality: quality
-      });
-    }
-  }
-  console.log("[CineFreak] Total episode qualities extracted: " + qualities.length);
-  return qualities;
-}
-
-function filterQualities(qualities) {
-  if (!qualities || !qualities.length) return [];
-  const filtered = [];
-  for (let i = 0; i < qualities.length; i++) {
-    const q = qualities[i];
-    if (q.quality === '480p' || q.quality === 'SD') continue;
-    filtered.push(q);
-  }
-  
-  const rank = { '4K': 0, '2160p': 0, '1080p': 1, '720p': 2, 'HD': 3 };
-  return filtered.sort((a, b) => {
-    const rankA = rank[a.quality] !== undefined ? rank[a.quality] : 99;
-    const rankB = rank[b.quality] !== undefined ? rank[b.quality] : 99;
-    return rankA - rankB;
-  });
-}
-
-function extractHash(url) {
-  if (!url) return '';
-  const idx1 = url.indexOf('/f/');
-  const idx2 = url.indexOf('/v/');
-  const start = idx1 >= 0 ? idx1 + 3 : (idx2 >= 0 ? idx2 + 3 : -1);
-  if (start < 0) return '';
-  return url.substring(start);
-}
-
-async function resolveFslUrl(url, userAgent) {
-  if (!url) return null;
-  const hash = extractHash(url);
-  if (!hash) return null;
-  
-  const cinecloudUrl = `${CINECLOUD_BASE}/f/${hash}`;
-  console.log("[CineFreak] Resolving FSL URL from: " + cinecloudUrl);
-  const html = await fetchText(cinecloudUrl, userAgent);
-  if (!html) return null;
-  
-  return extractFslUrl(html);
-}
+const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
 async function getStreams(tmdbId, type, season, episode) {
-  console.log(`[CineFreak] getStreams called. TMDB: ${tmdbId} | Type: ${type} | S${season}E${episode}`);
+  console.log(`[CineFreak] Bắt đầu lấy stream cho TMDB: ${tmdbId}`);
   try {
     const isTv = type === 'tv' || type === 'series';
-    const userAgent = MOBILE_UAS[0];
+    const tmdbUrl = `https://api.themoviedb.org/3/${isTv ? 'tv' : 'movie'}/${tmdbId}?api_key=ca1f881d0bd7bbf9cb3170edd54b52d5`;
     
-    const tmdbInfo = await getTMDBInfo(tmdbId, type, userAgent);
-    if (!tmdbInfo || !tmdbInfo.title) {
-      console.log("[CineFreak] Failed to get TMDB info.");
+    const tmdbRes = await fetch(tmdbUrl);
+    const tmdbData = await tmdbRes.json();
+    const title = tmdbData.name || tmdbData.title;
+    if (!title) return [];
+
+    console.log(`[CineFreak] Đang tìm kiếm phim: ${title}`);
+    const searchUrl = `${BASE_URL}/wp-json/wp/v2/search?search=${encodeURIComponent(title)}&per_page=5`;
+    const searchRes = await fetch(searchUrl);
+    const searchData = await searchRes.json();
+    
+    if (!searchData || !searchData.length) {
+      console.log("[CineFreak] Không tìm thấy bài viết nào trên site.");
       return [];
     }
-    
-    const targetSeason = isTv ? parseInt(season, 10) || 1 : null;
-    let searchResults = await searchCinefreak(tmdbInfo.title, userAgent);
-    
-    if (!searchResults || searchResults.length < 3) {
-      console.log("[CineFreak] Few results, trying extended search with year.");
-      const extendedResults = await searchCinefreak(`${tmdbInfo.title} ${tmdbInfo.year}`, userAgent);
-      if (extendedResults && extendedResults.length) {
-        searchResults = extendedResults;
+
+    const postUrl = searchData[0].url;
+    console.log("[CineFreak] Đang truy cập bài viết: " + postUrl);
+    const postRes = await fetch(postUrl);
+    const postHtml = await postRes.text();
+
+    const regex = /\/generate\.php\?id=([a-zA-Z0-9+/=]+)/g;
+    let match;
+    const streams = [];
+
+    console.log("[CineFreak] Đang quét link giải mã...");
+    while ((match = regex.exec(postHtml)) !== null) {
+      try {
+        const decoded = atob(match[1]).replace(/newgo32$/, '');
+        if (!decoded.includes('/f/')) continue;
+        
+        const hash = decoded.split('/').pop();
+        console.log("[CineFreak] Đang giải mã hash: " + hash);
+        const finalUrlRes = await fetch(`${CINECLOUD_BASE}/f/${hash}`);
+        const finalHtml = await finalUrlRes.text();
+        const directUrlMatch = finalHtml.match(/window\.location\.href="([^"]+)"/);
+        
+        if (directUrlMatch) {
+          const directUrl = directUrlMatch[1].replace(/&amp;/g, '&');
+          console.log("[CineFreak] Đã lấy được link trực tiếp.");
+          streams.push({
+            name: PROVIDER_NAME,
+            url: directUrl,
+            quality: decoded.includes('2160') ? '4K' : '1080p'
+          });
+        }
+      } catch (e) {
+        console.log("[CineFreak] Lỗi khi giải mã link: " + e.message);
       }
     }
     
-    if (!searchResults || !searchResults.length) {
-      console.log("[CineFreak] No search results found.");
-      return [];
-    }
-    
-    const match = matchByTitleYear(tmdbInfo.title, tmdbInfo.year, searchResults, targetSeason);
-    if (!match) {
-      console.log("[CineFreak] No confident matches found.");
-      return [];
-    }
-    
-    console.log(`[CineFreak] Selected match: "${match.title}"`);
-    
-    let postUrl = match.url;
-    if (!postUrl.startsWith('http')) {
-      postUrl = postUrl.startsWith('/') ? BASE_URL + postUrl : BASE_URL + '/' + postUrl;
-    }
-    
-    console.log("[CineFreak] Fetching post page: " + postUrl);
-    const postHtml = await fetchText(postUrl, userAgent);
-    if (!postHtml) {
-      console.log("[CineFreak] Failed to fetch post page.");
-      return [];
-    }
-    
-    let qualities = [];
-    if (isTv) {
-      const targetEpisode = parseInt(episode, 10) || 1;
-      qualities = extractEpisodeQualities(postHtml, targetEpisode);
-    } else {
-      qualities = extractMovieQualities(postHtml);
-    }
-    
-    if (!qualities || !qualities.length) {
-      console.log("[CineFreak] No qualities extracted.");
-      return [];
-    }
-    
-    const filteredQualities = filterQualities(qualities);
-    if (!filteredQualities.length) {
-      console.log("[CineFreak] No qualities left sau khi lọc.");
-      return [];
-    }
-    
-    const finalStreams = [];
-    for (let i = 0; i < filteredQualities.length; i++) {
-      const q = filteredQualities[i];
-      const directUrl = await resolveFslUrl(q.decodedUrl, userAgent);
-      
-      if (directUrl) {
-        console.log("[CineFreak] Successfully resolved direct URL for " + q.quality);
-        finalStreams.push({
-          name: PROVIDER_NAME,
-          title: `${tmdbInfo.title}\n${q.quality} | CineFreak`,
-          url: directUrl,
-          quality: q.quality,
-          headers: {
-            'Referer': CINECLOUD_BASE + '/',
-            'User-Agent': userAgent
-          }
-        });
-      } else {
-        console.log("[CineFreak] Failed to resolve direct URL for " + q.quality);
-      }
-    }
-    
-    console.log(`[CineFreak] Returning ${finalStreams.length} final streams.`);
-    return finalStreams;
+    console.log(`[CineFreak] Hoàn tất, tìm thấy ${streams.length} nguồn.`);
+    return streams;
   } catch (e) {
-    console.log(`[CineFreak] Global Error: ${e.message}`);
+    console.log("[CineFreak] Lỗi hệ thống: " + e.message);
     return [];
   }
 }
