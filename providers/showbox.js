@@ -75,7 +75,23 @@ async function extractFebBoxShare(showboxId, mediaType, seasonNum, episodeNum, u
     const sharePageUrl = `https://www.febbox.com/mbp/to_share_page?box_type=${boxType}&mid=${showboxId}&json=1`;
     console.log(`[ShowBox] Đang yêu cầu link share FebBox: ${sharePageUrl}`);
     
-    const shareRes = await fetch(sharePageUrl).then((res) => res.json());
+    const formattedCookie = uiToken.startsWith("ui=") ? uiToken : `ui=${uiToken}`;
+    const febboxHeaders = {
+      ...WORKING_HEADERS,
+      "Cookie": formattedCookie,
+      "Referer": "https://www.febbox.com/"
+    };
+    
+    let shareRes;
+    try {
+      const res = await fetch(sharePageUrl, { headers: febboxHeaders });
+      const text = await res.text();
+      shareRes = JSON.parse(text);
+    } catch (e) {
+      console.log(`[ShowBox] 🚨 Lỗi parse JSON từ FebBox (Có thể bị Cloudflare chặn hoặc Cookie sai).`);
+      return [];
+    }
+
     if (!shareRes || shareRes.code !== 1 || !shareRes.data) {
       console.log(`[ShowBox] Không tìm thấy link share FebBox cho ShowBox ID: ${showboxId}`);
       return [];
@@ -88,7 +104,15 @@ async function extractFebBoxShare(showboxId, mediaType, seasonNum, episodeNum, u
     console.log(`[ShowBox] Đã phân giải Share Key: ${shareKey}`);
     
     const listUrl = `https://www.febbox.com/file/file_share_list?share_key=${shareKey}`;
-    const listRes = await fetch(listUrl, { headers: { "Accept-Language": "en" } }).then((res) => res.json());
+    let listRes;
+    try {
+      const res = await fetch(listUrl, { headers: febboxHeaders });
+      const text = await res.text();
+      listRes = JSON.parse(text);
+    } catch (e) {
+      console.log(`[ShowBox] 🚨 Lỗi parse JSON danh sách file.`);
+      return [];
+    }
     
     if (!listRes || listRes.code !== 1 || !listRes.data || !listRes.data.file_list) {
       console.log(`[ShowBox] Lỗi lấy danh sách file cho Share Key: ${shareKey}`);
@@ -106,7 +130,16 @@ async function extractFebBoxShare(showboxId, mediaType, seasonNum, episodeNum, u
         return [];
       }
       const seasonListUrl = `https://www.febbox.com/file/file_share_list?share_key=${shareKey}&parent_id=${seasonFolder.fid}&page=1`;
-      const seasonRes = await fetch(seasonListUrl, { headers: { "Accept-Language": "en" } }).then((res) => res.json());
+      let seasonRes;
+      try {
+        const res = await fetch(seasonListUrl, { headers: febboxHeaders });
+        const text = await res.text();
+        seasonRes = JSON.parse(text);
+      } catch (e) {
+        console.log(`[ShowBox] 🚨 Lỗi parse JSON danh sách tập.`);
+        return [];
+      }
+
       if (!seasonRes || seasonRes.code !== 1 || !seasonRes.data || !seasonRes.data.file_list) {
         console.log(`[ShowBox] Lỗi lấy danh sách tập trong thư mục Season.`);
         return [];
@@ -129,14 +162,12 @@ async function extractFebBoxShare(showboxId, mediaType, seasonNum, episodeNum, u
       "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
     };
     
-    const formattedCookie = uiToken.startsWith("ui=") ? uiToken : `ui=${uiToken}`;
-    
     for (const file of fids) {
       const qualityUrl = `https://www.febbox.com/console/video_quality_list?fid=${file.fid}&share_key=${shareKey}`;
       console.log(`[ShowBox] Đang lấy danh sách chất lượng cho file: ${file.file_name}`);
       
       const qualityRes = await fetch(qualityUrl, {
-        headers: { "Cookie": formattedCookie }
+        headers: febboxHeaders
       }).then((res) => res.json()).catch(() => null);
       
       if (!qualityRes || !qualityRes.html) {
