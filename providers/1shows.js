@@ -20,11 +20,17 @@ async function requestWithBypass(url, options, expectJson = false) {
   let text = null;
   let needsBypass = false;
 
-  const doFetch = async (fetchOpts) => {
+  // Bổ sung các cờ quan trọng từ mã gốc
+  const fetchOptions = Object.assign({}, options, {
+    cfKiller: true,
+    skipSizeCheck: true
+  });
+
+  const doFetch = async (opts) => {
     const controller = new AbortController();
-    const id = setTimeout(() => controller.abort(), 8000);
+    const id = setTimeout(() => controller.abort(), 10000);
     try {
-      const res = await fetch(url, { ...fetchOpts, signal: controller.signal });
+      const res = await fetch(url, { ...opts, signal: controller.signal });
       const txt = await res.text();
       clearTimeout(id);
       return { res, txt };
@@ -36,7 +42,7 @@ async function requestWithBypass(url, options, expectJson = false) {
 
   try {
     console.log("[1Shows] Fetching URL: " + url);
-    const result = await doFetch(options);
+    const result = await doFetch(fetchOptions);
     response = result.res;
     text = result.txt;
 
@@ -45,9 +51,6 @@ async function requestWithBypass(url, options, expectJson = false) {
       needsBypass = true;
     } else if (expectJson && text.trim().startsWith('<')) {
       console.log("[1Shows] Sneaky Cloudflare 200 OK (HTML instead of JSON) detected.");
-      needsBypass = true;
-    } else if (!expectJson && (text.includes('Just a moment...') || text.includes('cf-browser-verification'))) {
-      console.log("[1Shows] Cloudflare HTML challenge detected.");
       needsBypass = true;
     }
   } catch (e) {
@@ -59,9 +62,9 @@ async function requestWithBypass(url, options, expectJson = false) {
     console.log("[1Shows] Executing Cloudflare bypass for: " + url);
     try {
       const bypassHeaders = await globalThis.Cloudflare.bypass(url);
-      const newOptions = { ...options };
-      newOptions.headers = { ...(options.headers || {}), ...(bypassHeaders || {}) };
-      const result = await doFetch(newOptions);
+      const bypassOptions = { ...fetchOptions };
+      bypassOptions.headers = { ...(fetchOptions.headers || {}), ...(bypassHeaders || {}) };
+      const result = await doFetch(bypassOptions);
       response = result.res;
       text = result.txt;
       console.log("[1Shows] Bypass request status: " + response.status);
@@ -224,7 +227,7 @@ async function getStreams(tmdbId, type, season, episode) {
     ]);
 
     if (!sources || sources.length === 0) {
-      console.log("[1Shows] No sources returned from fetchDownloadSources.");
+      console.log("[1Shows] No sources returned từ fetchDownloadSources.");
       return [];
     }
 
