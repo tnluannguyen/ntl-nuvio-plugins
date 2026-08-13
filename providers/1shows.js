@@ -28,6 +28,7 @@ function decryptPayload(encryptedData, tokenHex) {
     decrypted = Buffer.concat([decrypted, decipher.final()]);
     return JSON.parse(decrypted.toString('utf8'));
   } catch (e) {
+    console.log("[1Shows] Decrypt Error: " + e.message);
     return null;
   }
 }
@@ -35,24 +36,42 @@ function decryptPayload(encryptedData, tokenHex) {
 async function getStreams(tmdbId, type, season, episode) {
   if (!tmdbId) return [];
   const isTv = type === 'tv' || type === 'series';
+  console.log(`[1Shows] Bắt đầu lấy stream cho TMDB: ${tmdbId}`);
   
   try {
+    console.log("[1Shows] Đang lấy download-token...");
     const tokenRes = await fetch(`${API_URL}/download-token`, { headers: API_HEADERS });
     const tokenData = await tokenRes.json();
-    if (!tokenData || !tokenData.token) return [];
+    
+    if (!tokenData || !tokenData.token) {
+      console.log("[1Shows] Không lấy được token hợp lệ.");
+      return [];
+    }
+    console.log("[1Shows] Đã có token: " + tokenData.token.substring(0, 10) + "...");
 
     const endpoint = isTv 
       ? `/download/tv/${tmdbId}/${season}/${episode}`
       : `/download/movie/${tmdbId}`;
 
+    console.log("[1Shows] Đang gọi endpoint: " + endpoint);
     const sourcesRes = await fetch(`${API_URL}${endpoint}`, {
       headers: { ...API_HEADERS, 'x-download-token': tokenData.token }
     });
     
     const encryptedRes = await sourcesRes.json();
-    const decrypted = decryptPayload(encryptedRes, tokenData.token);
-    if (!decrypted || !Array.isArray(decrypted.sources)) return [];
+    if (!encryptedRes || !encryptedRes.ct) {
+      console.log("[1Shows] Endpoint không trả về dữ liệu mã hóa hợp lệ.");
+      return [];
+    }
 
+    console.log("[1Shows] Đang giải mã dữ liệu...");
+    const decrypted = decryptPayload(encryptedRes, tokenData.token);
+    if (!decrypted || !Array.isArray(decrypted.sources)) {
+      console.log("[1Shows] Giải mã thất bại hoặc không có sources.");
+      return [];
+    }
+
+    console.log(`[1Shows] Tìm thấy ${decrypted.sources.length} nguồn phát.`);
     return decrypted.sources.map(source => {
       let url = source.url;
       if (url.includes('pixeldrain.com')) {
@@ -69,6 +88,7 @@ async function getStreams(tmdbId, type, season, episode) {
       };
     });
   } catch (err) {
+    console.log("[1Shows] Lỗi hệ thống: " + err.message);
     return [];
   }
 }
