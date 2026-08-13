@@ -2,7 +2,7 @@ const crypto = require('crypto');
 
 const PROVIDER_NAME = '1Shows';
 const SITE_URL = 'https://www.1shows.org';
-const API_URL = 'https://www.1shows.org/api'; // Thêm www vào đây
+const API_URL = 'https://www.1shows.org/api';
 const DOWNLOAD_KEY_HEX = '7a03086357a2147dab4d757e8ed2ff8b5dc8707ee3d473afcb80d97727afa191';
 
 const API_HEADERS = {
@@ -33,13 +33,15 @@ async function getStreams(tmdbId, type, season, episode) {
   const isTv = type === 'tv' || type === 'series';
   
   try {
+    // BƯỚC QUAN TRỌNG: Ghé thăm trang chủ trước để lấy Session Cookie
+    console.log("[1Shows] Đang khởi tạo phiên làm việc...");
+    await fetch(SITE_URL); 
+
     // Bước 1: Lấy Token
+    console.log("[1Shows] Đang lấy download-token...");
     const tokenRes = await fetch(`${API_URL}/download-token`, { headers: API_HEADERS });
     const tokenData = await tokenRes.json();
-    if (!tokenData || !tokenData.token) {
-      console.log("[1Shows] Lỗi: Không lấy được token từ API.");
-      return [];
-    }
+    if (!tokenData || !tokenData.token) return [];
 
     // Bước 2: Gọi Endpoint lấy link
     const endpoint = isTv ? `/download/tv/${tmdbId}/${season}/${episode}` : `/download/movie/${tmdbId}`;
