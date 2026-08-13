@@ -21,11 +21,17 @@ async function requestWithBypass(url, options, expectJson = false) {
   let text = null;
   let needsBypass = false;
 
-  const doFetch = async (fetchOpts) => {
+  // Bổ sung các cờ quan trọng từ mã gốc
+  const fetchOptions = Object.assign({}, options, {
+    cfKiller: true,
+    skipSizeCheck: true
+  });
+
+  const doFetch = async (opts) => {
     const controller = new AbortController();
-    const id = setTimeout(() => controller.abort(), 8000);
+    const id = setTimeout(() => controller.abort(), 10000);
     try {
-      const res = await fetch(url, { ...fetchOpts, signal: controller.signal });
+      const res = await fetch(url, { ...opts, signal: controller.signal });
       const txt = await res.text();
       clearTimeout(id);
       return { res, txt };
@@ -37,17 +43,14 @@ async function requestWithBypass(url, options, expectJson = false) {
 
   try {
     console.log("[CineFreak] Fetching URL: " + url);
-    const result = await doFetch(options);
+    const result = await doFetch(fetchOptions);
     response = result.res;
     text = result.txt;
 
     if (response.status === 403 || response.status === 503) {
       console.log("[CineFreak] Cloudflare 403/503 detected.");
       needsBypass = true;
-    } else if (expectJson && text.trim().startsWith('<')) {
-      console.log("[CineFreak] Sneaky Cloudflare 200 OK (HTML instead of JSON) detected.");
-      needsBypass = true;
-    } else if (!expectJson && (text.includes('Just a moment...') || text.includes('cf-browser-verification'))) {
+    } else if (text.includes('Just a moment...') || text.includes('cf-browser-verification')) {
       console.log("[CineFreak] Cloudflare HTML challenge detected.");
       needsBypass = true;
     }
@@ -60,9 +63,9 @@ async function requestWithBypass(url, options, expectJson = false) {
     console.log("[CineFreak] Executing Cloudflare bypass for: " + url);
     try {
       const bypassHeaders = await globalThis.Cloudflare.bypass(url);
-      const newOptions = { ...options };
-      newOptions.headers = { ...(options.headers || {}), ...(bypassHeaders || {}) };
-      const result = await doFetch(newOptions);
+      const bypassOptions = { ...fetchOptions };
+      bypassOptions.headers = { ...(fetchOptions.headers || {}), ...(bypassHeaders || {}) };
+      const result = await doFetch(bypassOptions);
       response = result.res;
       text = result.txt;
       console.log("[CineFreak] Bypass request status: " + response.status);
@@ -473,7 +476,7 @@ async function getStreams(tmdbId, type, season, episode) {
     
     const filteredQualities = filterQualities(qualities);
     if (!filteredQualities.length) {
-      console.log("[CineFreak] No qualities left after filtering.");
+      console.log("[CineFreak] No qualities left sau khi lọc.");
       return [];
     }
     
