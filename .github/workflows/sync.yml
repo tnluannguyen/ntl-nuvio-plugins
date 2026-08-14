@@ -1,0 +1,39 @@
+name: Auto Sync Nuvio Plugins
+
+on:
+  schedule:
+    - cron: '0 */12 * * *'
+  workflow_dispatch:
+
+jobs:
+  sync-plugins:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Create providers directory
+        run: mkdir -p providers
+
+      - name: Download plugin files
+        run: |
+          BASE_URL="https://raw.githubusercontent.com/NuvioPlugin/All-in-One-Nuvio/main/providers"
+          curl -sSL "$BASE_URL/goated.js" -o providers/goated.js
+          curl -sSL "$BASE_URL/videasy.js" -o providers/videasy.js
+          curl -sSL "$BASE_URL/cinefreak.js" -o providers/cinefreak.js
+          curl -sSL "$BASE_URL/4khdhub.js" -o providers/4khdhub.js
+          curl -sSL "$BASE_URL/uhdmovies.js" -o providers/uhdmovies.js
+          curl -sSL "$BASE_URL/netmirro.js" -o providers/netmirro.js
+          curl -sSL "$BASE_URL/onlykdrama.js" -o providers/onlykdrama.js
+
+      - name: Commit and Push changes
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add providers/*.js
+          if git diff --staged --quiet; then
+            echo "No changes"
+          else
+            git commit -m "Auto-update plugins from upstream"
+            git push
+          fi
