@@ -1,0 +1,49 @@
+{
+  "name": "My VIP Nuvio Plugins",
+  "description": "Bộ sưu tập plugin tự động cập nhật và plugin tự viết",
+  "version": "1.0.0",
+  "scrapers": [
+    {
+      "name": "Goated",
+      "filename": "providers/goated.js",
+      "supportedTypes": ["movie", "tv"],
+      "enabled": true
+    },
+    {
+      "name": "VidEasy",
+      "filename": "providers/videasy.js",
+      "supportedTypes": ["movie", "tv"],
+      "enabled": true
+    },
+    {
+      "name": "CineFreak",
+      "filename": "providers/cinefreak.js",
+      "supportedTypes": ["movie", "tv"],
+      "enabled": true
+    },
+    {
+      "name": "4KHDHub",
+      "filename": "providers/4khdhub.js",
+      "supportedTypes": ["movie", "tv"],
+      "enabled": true
+    },
+    {
+      "name": "UHDMovies",
+      "filename": "providers/uhdmovies.js",
+      "supportedTypes": ["movie", "tv"],
+      "enabled": true
+    },
+    {
+      "name": "NetMirro",
+      "filename": "providers/netmirro.js",
+      "supportedTypes": ["movie", "tv"],
+      "enabled": true
+    },
+    {
+      "name": "OnlyKDrama",
+      "filename": "providers/onlykdrama.js",
+      "supportedTypes": ["tv"],
+      "enabled": true
+    }
+  ]
+}
