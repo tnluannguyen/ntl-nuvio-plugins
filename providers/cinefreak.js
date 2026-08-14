@@ -122,6 +122,17 @@ function extractFslUrl(html) {
       return url.replace(/&amp;/g, '&');
     }
   }
+  
+  const idx = html.indexOf('href="');
+  if (idx !== -1) {
+    const start = idx + 6;
+    const end = html.indexOf('"', start);
+    if (end !== -1) {
+      const url = html.substring(start, end);
+      return url.replace(/&amp;/g, '&');
+    }
+  }
+  
   return null;
 }
 
@@ -263,7 +274,6 @@ async function getStreams(tmdbId, type = 'movie', season = null, episode = null)
       }
     }
     
-    // Lọc và sắp xếp theo logic Override cũ
     const bestStreams = {};
     for (const s of streams) {
       if (!bestStreams[s.quality] || s.score > bestStreams[s.quality].score) {
