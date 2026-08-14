@@ -1,5 +1,4 @@
 const BASE_URL = 'https://cinefreak.nl';
-const CINECLOUD_BASE = 'https://cinecloud.pro';
 const TMDB_API_KEY = 'ca1f881d0bd7bbf9cb3170edd54b52d5';
 const PROVIDER_NAME = 'CineFreak';
 
@@ -118,28 +117,31 @@ function extractFslUrl(html) {
   let match;
   while ((match = regex.exec(html)) !== null) {
     const url = match[1] || match[2] || match[3] || match[4];
-    if (url && !url.includes('cinecloud.pro')) {
+    if (url && !url.includes('cinecloud')) {
       return url.replace(/&amp;/g, '&');
     }
   }
   
-  const idx = html.indexOf('href="');
-  if (idx !== -1) {
-    const start = idx + 6;
-    const end = html.indexOf('"', start);
-    if (end !== -1) {
-      const url = html.substring(start, end);
-      return url.replace(/&amp;/g, '&');
+  // Fallback: Tìm chính xác nút bấm có id="fsl" (FAST CLOUD)
+  const fslIdx = html.indexOf('id="fsl"');
+  if (fslIdx !== -1) {
+    const hrefIdx = html.lastIndexOf('href="', fslIdx);
+    if (hrefIdx !== -1) {
+      const start = hrefIdx + 6;
+      const end = html.indexOf('"', start);
+      if (end !== -1) {
+        return html.substring(start, end).replace(/&amp;/g, '&');
+      }
     }
   }
   
   return null;
 }
 
-async function resolveFslUrl(encodedId) {
-  if (!encodedId) return null;
-  const url = `${CINECLOUD_BASE}/f/${encodedId}`;
-  const html = await fetchText(url);
+// ĐÃ SỬA: Nhận trực tiếp decodedUrl thay vì encodedId để hỗ trợ tên miền động
+async function resolveFslUrl(decodedUrl) {
+  if (!decodedUrl) return null;
+  const html = await fetchText(decodedUrl);
   if (!html) return null;
   return extractFslUrl(html);
 }
@@ -253,7 +255,8 @@ async function getStreams(tmdbId, type = 'movie', season = null, episode = null)
     
     const streams = [];
     for (const q of qualities) {
-      const finalUrl = await resolveFslUrl(q.encodedId);
+      // ĐÃ SỬA: Truyền decodedUrl thay vì encodedId
+      const finalUrl = await resolveFslUrl(q.decodedUrl);
       if (finalUrl) {
         const textForScoring = (q.label + ' ' + match.title).toLowerCase();
         const sizeMB = parseSizeToMB(q.label);
@@ -263,13 +266,19 @@ async function getStreams(tmdbId, type = 'movie', season = null, episode = null)
         if (textForScoring.includes('dual') || textForScoring.includes('multi')) score += 500000;
         if (textForScoring.includes('h265') || textForScoring.includes('hevc')) score += 100000;
         
+        // ĐÃ SỬA: Tự động lấy Origin từ decodedUrl làm Referer
+        let referer = 'https://cinecloud.site/';
+        try {
+          referer = new URL(q.decodedUrl).origin + '/';
+        } catch(e) {}
+
         streams.push({
           name: `CineFreak [${q.quality}]`,
           title: `${match.title}\n📺 ${q.quality} | 💾 ${q.label}`,
           url: finalUrl,
           quality: q.quality,
           score: score,
-          headers: { 'Referer': `${CINECLOUD_BASE}/` }
+          headers: { 'Referer': referer }
         });
       }
     }
