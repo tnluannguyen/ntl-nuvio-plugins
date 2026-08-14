@@ -1,3 +1,5 @@
+const CryptoJS = require("crypto-js");
+
 const BASE_URL = "https://app.cloud-mb.xyz";
 const TOKEN = "jdvhhjv255vghhghdhvfch2565656jhdcghfdf";
 const APP_ID = "com.movieblast";
@@ -12,8 +14,6 @@ const SEARCH_HEADERS = Object.assign({}, HEADERS, {
 const SIGN_SECRET = "GJ8reydarI7Jqat9rvbAJKNQ9gY4DoEQF2H5nfuI1gi";
 const TMDB_API_KEY = "ca1f881d0bd7bbf9cb3170edd54b52d5";
 const TMDB_BASE_URL = "https://api.themoviedb.org/3";
-
-const CryptoJS = require("crypto-js");
 
 function generateSignedUrl(urlStr) {
   try {
@@ -57,13 +57,11 @@ async function getTMDBDetails(tmdbId, mediaType) {
     method: "GET",
     headers: { "Accept": "application/json", "User-Agent": "Mozilla/5.0" }
   });
-  console.log("[MovieBlast] TMDB Response status: " + response.status);
   if (!response.ok) throw new Error(`TMDB API error: ${response.status}`);
   const data = await response.json();
   const title = mediaType === "tv" ? data.name : data.title;
   const releaseDate = mediaType === "tv" ? data.first_air_date : data.release_date;
   const year = releaseDate ? parseInt(releaseDate.split("-")[0]) : null;
-  console.log("[MovieBlast] TMDB Details extracted: " + title + " (" + year + ")");
   return { title, year };
 }
 
@@ -91,13 +89,11 @@ function findBestMatch(mediaInfo, searchResults) {
       const resultYear = parseInt(result.release_date.split("-")[0]);
       if (mediaInfo.year === resultYear) score += 0.2;
     }
-    console.log("[MovieBlast] Comparing '" + result.name + "' with '" + mediaInfo.title + "' (Score: " + score + ")");
     if (score > bestScore && score > 0.4) {
       bestScore = score;
       bestMatch = result;
     }
   }
-  console.log("[MovieBlast] Best match score: " + bestScore);
   return bestMatch;
 }
 
@@ -108,40 +104,23 @@ async function getStreams(tmdbId, mediaType = "movie", season = null, episode = 
     const safeQuery = encodeURIComponent(mediaInfo.title);
     const searchUrl = `${BASE_URL}/api/search/${safeQuery}/${TOKEN}`;
     
-    console.log("[MovieBlast] Searching MovieBlast: " + searchUrl);
     const searchRes = await fetch(searchUrl, { headers: SEARCH_HEADERS });
-    console.log("[MovieBlast] Search response status: " + searchRes.status);
-    
-    if (!searchRes.ok) {
-      console.log(`[MovieBlast] Search failed with status: ${searchRes.status}`);
-      return [];
-    }
+    if (!searchRes.ok) return [];
     
     const searchData = await searchRes.json();
     const searchResults = searchData.search || [];
-    console.log("[MovieBlast] Search found " + searchResults.length + " results.");
     
     const match = findBestMatch(mediaInfo, searchResults);
-    if (!match) {
-      console.log("[MovieBlast] No confident matches found in MovieBlast.");
-      return [];
-    }
+    if (!match) return [];
     
     const internalId = match.id;
     const isSeries = match.type.toLowerCase().includes("serie") || mediaType === "tv";
-    console.log(`[MovieBlast] Selected match: "${match.name}" (ID: ${internalId})`);
     
     const detailPath = isSeries ? "series/show" : "media/detail";
     const detailUrl = `${BASE_URL}/api/${detailPath}/${internalId}/${TOKEN}`;
     
-    console.log("[MovieBlast] Fetching details: " + detailUrl);
     const detailRes = await fetch(detailUrl, { headers: HEADERS });
-    console.log("[MovieBlast] Detail response status: " + detailRes.status);
-    
-    if (!detailRes.ok) {
-      console.log(`[MovieBlast] Detail fetch failed: ${detailRes.status}`);
-      return [];
-    }
+    if (!detailRes.ok) return [];
     
     const detailData = await detailRes.json();
     let targetVideos = [];
@@ -153,22 +132,13 @@ async function getStreams(tmdbId, mediaType = "movie", season = null, episode = 
         const targetEpisode = (targetSeason.episodes || []).find((e) => e.episode_number == episode);
         if (targetEpisode) {
           targetVideos = targetEpisode.videos || [];
-          console.log(`[MovieBlast] Found ${targetVideos.length} videos for S${season}E${episode}.`);
-        } else {
-          console.log(`[MovieBlast] Episode ${episode} not found in Season ${season}.`);
         }
-      } else {
-        console.log(`[MovieBlast] Season ${season} not found.`);
       }
     } else {
       targetVideos = detailData.videos || [];
-      console.log(`[MovieBlast] Found ${targetVideos.length} videos for movie.`);
     }
     
-    if (targetVideos.length === 0) {
-      console.log("[MovieBlast] No video links found in details.");
-      return [];
-    }
+    if (targetVideos.length === 0) return [];
     
     const streams = targetVideos.map((vid) => {
       const rawUrl = vid.link;
@@ -192,7 +162,6 @@ async function getStreams(tmdbId, mediaType = "movie", season = null, episode = 
       };
     }).filter((s) => s !== null);
     
-    console.log(`[MovieBlast] Returning ${streams.length} final streams.`);
     return streams;
   } catch (error) {
     console.log(`[MovieBlast] Global Error: ${error.message}`);
