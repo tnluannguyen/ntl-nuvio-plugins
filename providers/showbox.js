@@ -1,5 +1,4 @@
 const cheerio = require("cheerio");
-const CryptoJS = require("crypto-js");
 
 const TMDB_API_KEY = "1c29a5198ee1854bd5eb45dbe8d17d92";
 const TMDB_BASE_URL = "https://api.themoviedb.org/3";
@@ -88,7 +87,7 @@ async function extractFebBoxShare(showboxId, mediaType, seasonNum, episodeNum, u
       const text = await res.text();
       shareRes = JSON.parse(text);
     } catch (e) {
-      console.log(`[ShowBox] 🚨 Lỗi parse JSON từ FebBox (Có thể bị Cloudflare chặn hoặc Cookie sai).`);
+      console.log(`[ShowBox] 🚨 Lỗi parse JSON từ FebBox.`);
       return [];
     }
 
@@ -151,9 +150,23 @@ async function extractFebBoxShare(showboxId, mediaType, seasonNum, episodeNum, u
       );
     }
     
-    console.log(`[ShowBox] Tìm thấy ${fids.length} file khớp trong FebBox share.`);
+    // BỘ LỌC TỐI ƯU: Chỉ lấy file video (.mkv, .mp4, .avi) để loại bỏ file rác (.srt, Captures)
+    fids = fids.filter(f => {
+      if (!f.file_name) return false;
+      const ext = f.file_name.toLowerCase();
+      return ext.endsWith('.mkv') || ext.endsWith('.mp4') || ext.endsWith('.avi');
+    });
+
+    // BỘ LỌC TỐI ƯU: Sắp xếp theo dung lượng giảm dần và chỉ lấy TỐI ĐA 3 FILE để tránh Timeout
+    fids.sort((a, b) => {
+      const sizeA = parseInt(a.file_size) || 0;
+      const sizeB = parseInt(b.file_size) || 0;
+      return sizeB - sizeA;
+    });
+    fids = fids.slice(0, 3);
+
+    console.log(`[ShowBox] Đã lọc và giữ lại ${fids.length} file video chuẩn nhất để quét chất lượng.`);
     
-    // ĐÃ SỬA: Xóa Range: bytes=0- và thêm Cookie vào videoHeaders
     const videoHeaders = {
       "Accept": "*/*",
       "Accept-Language": "en-US,en;q=0.8",
@@ -172,7 +185,7 @@ async function extractFebBoxShare(showboxId, mediaType, seasonNum, episodeNum, u
       }).then((res) => res.json()).catch(() => null);
       
       if (!qualityRes || !qualityRes.html) {
-        console.log(`[ShowBox] 🚨 CẢNH BÁO: Không lấy được luồng video! Cookie (uiToken) của FebBox có thể đã HẾT HẠN hoặc KHÔNG HỢP LỆ. Vui lòng cập nhật lại biến SHOWBOX_TOKEN.`);
+        console.log(`[ShowBox] 🚨 CẢNH BÁO: Không lấy được luồng video cho file này.`);
         continue;
       }
       
@@ -246,7 +259,7 @@ async function getStreams(tmdbId, mediaType = "movie", seasonNum = null, episode
   
   const uiToken = payload.showboxToken;
   if (!uiToken) {
-    console.error("[ShowBox] 🚨 LỖI: Không tìm thấy SHOWBOX_TOKEN trong biến môi trường. Vui lòng cấu hình trong file .env!");
+    console.error("[ShowBox] 🚨 LỖI: Không tìm thấy SHOWBOX_TOKEN trong biến môi trường.");
     return [];
   }
 
