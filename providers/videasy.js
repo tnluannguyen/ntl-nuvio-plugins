@@ -17,14 +17,10 @@ const REQUEST_HEADERS = {
 };
 
 const jl = [0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5, 0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174];
-const Tf = [0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476];
 const Js = 61;
 const _f = 8;
 const ms = 0x9e3779b9;
-const Ys = [109, 118, 109, 49]; 
-
-const Sf = x => (x * (x + 1) & 1) === 0;
-const bf = x => (x * (x + 1) & 1) === 1;
+const Ys = [109, 118, 109, 49]; // 'mvm1'
 
 function ui(x) {
   x >>>= 0; x ^= x >>> 16;
@@ -40,25 +36,6 @@ function ps(x, y) {
   return y === 0 ? x >>> 0 : ((x << y) | (x >>> (32 - y))) >>> 0;
 }
 
-function If(arr) {
-  let acc = Tf[0] >>> 0;
-  for (let i = 0; i < arr.length; i++) {
-    acc = ps((acc ^ Math.imul(arr.charCodeAt(i), jl[i & 15])) >>> 0, 5);
-  }
-  return ui(acc);
-}
-
-function Af(str) {
-  const arr = new Array(256);
-  for (let i = 0; i < 256; i++) arr[i] = i;
-  let j = 0;
-  for (let i = 0; i < 256; i++) {
-    j = (j + arr[i] + str.charCodeAt(i % str.length)) & 255;
-    const temp = arr[i]; arr[i] = arr[j]; arr[j] = temp;
-  }
-  return arr;
-}
-
 function wf(str) {
   let h = 0x811c9dc5;
   for (let i = 0; i < str.length; i++) {
@@ -70,16 +47,13 @@ function wf(str) {
 function vf(a, b, c) { return (((a ^ b) >>> 0) | ((a & b & c) >>> 0)) >>> 0; }
 
 function Nf(str, num) {
-  if (bf(str.length)) return { S: Af(str), acc: If(str) };
   const S = new Array(Js);
   let acc = ui(wf(str) ^ ui((num >>> 0) ^ ms)) >>> 0;
   for (let i = 0; i < _f; i++) {
-    if (Sf(i)) {
-      const mod = acc % Js;
-      acc = ps((acc + ms) >>> 0, 7 + (i & 7));
-      S[mod] = (acc ^ ui(acc)) >>> 0;
-      acc = ui((acc + mod) >>> 0);
-    } else { S[i] = jl[i & 15]; }
+    const mod = acc % Js;
+    acc = ps((acc + ms) >>> 0, 7 + (i & 7));
+    S[mod] = (acc ^ ui(acc)) >>> 0;
+    acc = ui((acc + mod) >>> 0);
   }
   return { S, acc: ui(acc ^ 0xa5a5a5a5) >>> 0 };
 }
@@ -101,7 +75,7 @@ function Cf(str, num, len) {
     const r = Rf(state, idx++);
     out[i++] = r & 255;
     if (i < len) out[i++] = (r >>> 8) & 255;
-    if (i < len) out[i++] = (r >>> 16) & 255; // ĐÃ SỬA: 10 -> 16
+    if (i < len) out[i++] = (r >>> 16) & 255; // ĐÃ SỬA: 16 chuẩn xác
     if (i < len) out[i++] = (r >>> 24) & 255;
   }
   return out;
@@ -183,7 +157,7 @@ async function getStreams(tmdbId, type = 'movie', season = null, episode = null)
       imdbId: mediaDetails.imdbId || '',
       enc: '2',
       seed: seed,
-      _t: Date.now()
+      t: Date.now() // ĐÃ SỬA: t thay vì _t
     };
 
     const queryString = Object.keys(params).map(k => `${k}=${encodeURIComponent(params[k])}`).join('&');
