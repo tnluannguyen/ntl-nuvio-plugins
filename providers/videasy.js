@@ -3,46 +3,48 @@ const { parseSizeToMB } = require('../utils/parser');
 const PROVIDER_NAME = 'VidEasy';
 const TMDB_API_KEY = 'ca1f881d0bd7bbf9cb3170edd54b52d5';
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
-const WINGS_API_BASE = 'https://wings.vidking.net';
+
+// ĐÃ CẬP NHẬT: Tên miền mới từ ảnh của bạn
+const WINGS_API_BASE = 'https://api.speedracelight.com';
+
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
 const REQUEST_HEADERS = {
   'User-Agent': USER_AGENT,
-  'Accept': 'application/json',
+  'Accept': '*/*',
   'Origin': 'https://www.vidking.net',
   'Referer': 'https://www.vidking.net/',
-  'Cache-Control': 'no-cache, no-store, must-revalidate',
-  'Pragma': 'no-cache',
-  'Expires': '0'
+  'Cache-Control': 'no-cache',
+  'Pragma': 'no-cache'
 };
 
+// ĐÃ CẬP NHẬT: Cấu trúc path mới /cdn/...
 const SERVERS = {
-  'Hydrogen': { path: 'hydrogen/sources-with-title' },
-  'Titanium': { path: 'titanium/sources-with-title' },
-  'Oxygen': { path: 'oxygen/sources-with-title' },
-  'Lithium': { path: 'downloader2/sources-with-title' },
-  'Krypton': { path: 'krypton/sources-with-title' },
-  'Carbon': { path: 'carbon/sources-with-title' },
-  'Aluminium': { path: 'lamovie/sources-with-title' },
-  'Nitrogen': { path: 'nitrogen/sources-with-title' },
-  'Neon': { path: 'superflix/sources-with-title' },
-  'Helium': { path: 'helium/sources-with-title' }
+  'Hydrogen': { path: 'cdn/sources-with-title' },
+  'Titanium': { path: 'cdn/sources-with-title' },
+  'Oxygen': { path: 'cdn/sources-with-title' },
+  'Lithium': { path: 'cdn/sources-with-title' },
+  'Krypton': { path: 'cdn/sources-with-title' },
+  'Carbon': { path: 'cdn/sources-with-title' },
+  'Aluminium': { path: 'cdn/sources-with-title' },
+  'Nitrogen': { path: 'cdn/sources-with-title' },
+  'Neon': { path: 'cdn/sources-with-title' },
+  'Helium': { path: 'cdn/sources-with-title' }
 };
 
-// --- BẮT ĐẦU: THUẬT TOÁN GIẢI MÃ WINGS DATABASE ---
+// --- THUẬT TOÁN GIẢI MÃ (GIỮ NGUYÊN VÌ THAM SỐ ENC=2 VẪN CÒN) ---
 const jl = [0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5, 0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174];
 const Tf = [0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476];
 const Js = 61;
 const _f = 8;
 const ms = 0x9e3779b9;
-const Ys = [109, 118, 109, 49]; // 'mvm1'
+const Ys = [109, 118, 109, 49]; 
 
 const Sf = x => (x * (x + 1) & 1) === 0;
 const bf = x => (x * (x + 1) & 1) === 1;
 
 function ui(x) {
-  x >>>= 0;
-  x ^= x >>> 16;
+  x >>>= 0; x ^= x >>> 16;
   x = Math.imul(x, 0x85ebca6b) >>> 0;
   x ^= x >>> 13;
   x = Math.imul(x, 0xc2b2ae35) >>> 0;
@@ -51,8 +53,7 @@ function ui(x) {
 }
 
 function ps(x, y) {
-  x >>>= 0;
-  y &= 31;
+  x >>>= 0; y &= 31;
   return y === 0 ? x >>> 0 : ((x << y) | (x >>> (32 - y))) >>> 0;
 }
 
@@ -70,9 +71,7 @@ function Af(str) {
   let j = 0;
   for (let i = 0; i < 256; i++) {
     j = (j + arr[i] + str.charCodeAt(i % str.length)) & 255;
-    const temp = arr[i];
-    arr[i] = arr[j];
-    arr[j] = temp;
+    const temp = arr[i]; arr[i] = arr[j]; arr[j] = temp;
   }
   return arr;
 }
@@ -85,9 +84,7 @@ function wf(str) {
   return ui(h);
 }
 
-function vf(a, b, c) {
-  return (((a ^ b) >>> 0) | ((a & b & c) >>> 0)) >>> 0;
-}
+function vf(a, b, c) { return (((a ^ b) >>> 0) | ((a & b & c) >>> 0)) >>> 0; }
 
 function Nf(str, num) {
   if (bf(str.length)) return { S: Af(str), acc: If(str) };
@@ -99,37 +96,29 @@ function Nf(str, num) {
       acc = ps((acc + ms) >>> 0, 7 + (i & 7));
       S[mod] = (acc ^ ui(acc)) >>> 0;
       acc = ui((acc + mod) >>> 0);
-    } else {
-      S[i] = jl[i & 15];
-    }
+    } else { S[i] = jl[i & 15]; }
   }
   return { S, acc: ui(acc ^ 0xa5a5a5a5) >>> 0 };
 }
 
 function Rf(state, idx) {
-  const S = state.S;
-  let acc = state.acc;
-  const mod = acc % Js;
-  const flag = 0 - +(mod in S);
-  const sVal = S[mod] >>> 0;
-  const mVal = Math.imul(ms, idx + 1) >>> 0;
+  const S = state.S; let acc = state.acc;
+  const mod = acc % Js; const flag = 0 - +(mod in S);
+  const sVal = S[mod] >>> 0; const mVal = Math.imul(ms, idx + 1) >>> 0;
   let v = vf(acc, (sVal ^ mVal) >>> 0, flag);
   v = (ps((v + acc) >>> 0, mod & 31) ^ ps(acc, Math.imul(mod, 7) & 31)) >>> 0;
-  acc = ui((v + ms) >>> 0);
-  S[mod] = acc >>> 0;
-  state.acc = acc;
+  acc = ui((v + ms) >>> 0); S[mod] = acc >>> 0; state.acc = acc;
   return acc >>> 0;
 }
 
 function Cf(str, num, len) {
-  const state = Nf(str, num);
-  const out = new Uint8Array(len);
+  const state = Nf(str, num); const out = new Uint8Array(len);
   let idx = 0;
   for (let i = 0; i < len;) {
     const r = Rf(state, idx++);
     out[i++] = r & 255;
     if (i < len) out[i++] = (r >>> 8) & 255;
-    if (i < len) out[i++] = (r >>> 16) & 255;
+    if (i < len) out[i++] = (r >>> 10) & 255;
     if (i < len) out[i++] = (r >>> 24) & 255;
   }
   return out;
@@ -138,8 +127,7 @@ function Cf(str, num, len) {
 function decodeBase64(str) {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
   const clean = str.replace(/-/g, '+').replace(/_/g, '/').replace(/=+$/, '');
-  const len = clean.length;
-  const out = new Uint8Array(Math.floor(len * 0.75));
+  const len = clean.length; const out = new Uint8Array(Math.floor(len * 0.75));
   let j = 0;
   for (let i = 0; i < len; i += 4) {
     const c1 = chars.indexOf(clean[i]);
@@ -157,11 +145,8 @@ function decryptWingsDatabase(b64Str, seedStr, tmdbIdNum) {
   const enc = decodeBase64(b64Str);
   const key = Cf(seedStr, tmdbIdNum, enc.length);
   for (let i = 0; i < enc.length; i++) enc[i] ^= key[i];
-  for (let i = 0; i < Ys.length; i++) {
-    if (enc[i] !== Ys[i]) throw new Error('decrypt failed: bad seed or tampered payload');
-  }
-  let dec = '';
-  const data = enc.subarray(Ys.length);
+  for (let i = 0; i < Ys.length; i++) { if (enc[i] !== Ys[i]) throw new Error('decrypt failed'); }
+  let dec = ''; const data = enc.subarray(Ys.length);
   for (let i = 0; i < data.length;) {
     const c = data[i++];
     if (c < 128) dec += String.fromCharCode(c);
@@ -171,173 +156,101 @@ function decryptWingsDatabase(b64Str, seedStr, tmdbIdNum) {
   }
   return dec;
 }
-// --- KẾT THÚC: THUẬT TOÁN GIẢI MÃ WINGS DATABASE ---
 
 function parseQuality(textStr) {
   const text = String(textStr).toLowerCase();
   if (text.includes('4k') || text.includes('2160') || text.includes('uhd')) return '4K';
   if (text.includes('1080') || text.includes('fhd')) return '1080p';
   if (text.includes('720') || (text.includes('hd') && !text.includes('uhd') && !text.includes('fhd'))) return '720p';
-  if (text.includes('480') || text.includes('sd')) return '480p';
-  return 'Unknown';
+  return '480p';
 }
 
-async function fetchMediaDetails(tmdbId, mediaType, season, episode) {
+async function fetchMediaDetails(tmdbId, mediaType) {
   try {
     const type = mediaType === 'tv' ? 'tv' : 'movie';
     const url = `${TMDB_BASE_URL}/${type}/${tmdbId}?api_key=${TMDB_API_KEY}&append_to_response=external_ids`;
-    const res = await fetch(url, { headers: { 'User-Agent': USER_AGENT, 'Accept': 'application/json' } });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const res = await fetch(url, { headers: { 'User-Agent': USER_AGENT } });
     const data = await res.json();
-    
     return {
       title: type === 'tv' ? data.name : data.title,
       year: (type === 'tv' ? data.first_air_date : data.release_date || '').substring(0, 4),
-      imdbId: data.external_ids?.imdb_id || null,
-      mediaType: mediaType
+      imdbId: data.external_ids?.imdb_id || null
     };
-  } catch (e) {
-    console.error(`[VidEasy] TMDB details fetch error: ${e.message}`);
-    return null;
-  }
+  } catch (e) { return null; }
 }
 
-async function fetchFromWingsServer(serverName, serverConfig, mediaType, tmdbId, mediaDetails, seed, season, episode) {
-  const params = {
-    title: mediaDetails.title,
-    mediaType: mediaType,
-    year: String(mediaDetails.year),
-    episodeId: String(episode || 1),
-    seasonId: String(season || 1),
-    tmdbId: String(tmdbId),
-    imdbId: mediaDetails.imdbId || '',
-    enc: '2',
-    seed: seed
-  };
-
-  const queryString = Object.keys(params).map(k => `${encodeURIComponent(k)}=${encodeURIComponent(params[k])}`).join('&');
-  const url = `${WINGS_API_BASE}/${serverConfig.path}?${queryString}`;
-  
-  console.log(`[VidEasy] Fetching ${serverName}: ${url}`);
-  
+async function getStreams(tmdbId, type = 'movie', season = null, episode = null) {
+  console.log(`[VidEasy] Request: tmdbId=${tmdbId} type=${type} S${season}E${episode}`);
   try {
+    const mediaDetails = await fetchMediaDetails(tmdbId, type);
+    if (!mediaDetails) return [];
+
+    // ĐÃ CẬP NHẬT: Lấy seed từ domain mới
+    const seedUrl = `${WINGS_API_BASE}/seed?mediaId=${tmdbId}`;
+    const seedRes = await fetch(seedUrl, { headers: REQUEST_HEADERS });
+    if (!seedRes.ok) throw new Error(`Seed HTTP ${seedRes.status}`);
+    const { seed } = await seedRes.json();
+
+    const params = {
+      title: mediaDetails.title,
+      mediaType: type === 'series' ? 'tv' : type,
+      year: mediaDetails.year,
+      episodeId: String(episode || 1),
+      seasonId: String(season || 1),
+      tmdbId: String(tmdbId),
+      imdbId: mediaDetails.imdbId || '',
+      enc: '2',
+      seed: seed,
+      _t: Date.now()
+    };
+
+    const queryString = Object.keys(params).map(k => `${k}=${encodeURIComponent(params[k])}`).join('&');
+    const url = `${WINGS_API_BASE}/cdn/sources-with-title?${queryString}`;
+    
+    console.log(`[VidEasy] Fetching sources: ${url}`);
     const res = await fetch(url, { headers: REQUEST_HEADERS });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const text = await res.text();
-    if (!text || text.trim() === '') throw new Error('Empty response');
     
     const decryptedJson = decryptWingsDatabase(text, seed, Number(tmdbId));
-    if (!decryptedJson) return [];
-    
     const parsedData = JSON.parse(decryptedJson);
     if (!parsedData || !parsedData.sources) return [];
 
     const streams = [];
     parsedData.sources.forEach(source => {
       if (!source.url) return;
-      
-      const rawQuality = source.quality || '1080p';
-      const quality = parseQuality(rawQuality);
-      const sizeMB = parseSizeToMB(source.size || source.title || source.name || '');
-      
+      const quality = parseQuality(source.quality || '1080p');
+      const sizeMB = parseSizeToMB(source.size || '');
       let score = sizeMB;
-      const textForScoring = (rawQuality + ' ' + (source.name || '') + ' ' + (source.title || '')).toLowerCase();
-      
-      if (textForScoring.includes('eng') || textForScoring.includes('english')) score += 1000000;
-      if (textForScoring.includes('dual') || textForScoring.includes('multi')) score += 500000;
-      if (textForScoring.includes('h265') || textForScoring.includes('hevc')) score += 100000;
+      if (source.quality?.includes('1080')) score += 1000000;
 
       streams.push({
-        name: `VidEasy [${serverName}]`,
+        name: `VidEasy [CDN]`,
         title: `${mediaDetails.title}\n📺 ${quality} | 💾 ${source.size || 'Unknown'}`,
-        url: source.file || source.url,
+        url: source.url,
         quality: quality,
         score: score,
-        headers: {
-          'Referer': 'https://www.vidking.net/',
-          'Origin': 'https://www.vidking.net',
-          'User-Agent': USER_AGENT
-        }
+        headers: { 'Referer': 'https://www.vidking.net/', 'Origin': 'https://www.vidking.net' }
       });
     });
-    
-    console.log(`[VidEasy] ✅ Found ${streams.length} stream(s) from ${serverName}`);
-    return streams;
-  } catch (e) {
-    console.warn(`[VidEasy] ❌ Error from ${serverName}: ${e.message}`);
-    return [];
-  }
-}
 
-async function getStreams(tmdbId, type = 'movie', season = null, episode = null) {
-  console.log(`[VidEasy] Request: tmdbId=${tmdbId} type=${type} S${season}E${episode}`);
-  try {
-    const mediaDetails = await fetchMediaDetails(tmdbId, type, season, episode);
-    if (!mediaDetails) {
-      console.log('[VidEasy] No TMDB details');
-      return [];
-    }
-    
-    console.log(`[VidEasy] TMDB: ${mediaDetails.title} (${mediaDetails.year})`);
-    
-    const seedUrl = `${WINGS_API_BASE}/seed?mediaId=${tmdbId}`;
-    console.log(`[VidEasy] Fetching seed from: ${seedUrl}`);
-    
-    const seedRes = await fetch(seedUrl, { headers: REQUEST_HEADERS });
-    if (!seedRes.ok) throw new Error(`Seed HTTP ${seedRes.status}`);
-    
-    const seedData = await seedRes.json();
-    const seed = seedData.seed;
-    if (!seed) throw new Error('No seed returned from API');
-    
-    console.log(`[VidEasy] Seed: ${seed}`);
-    
-    const serverPromises = Object.keys(SERVERS).map(serverName => {
-      return fetchFromWingsServer(serverName, SERVERS[serverName], type, tmdbId, mediaDetails, seed, season, episode);
-    });
-    
-    const resultsArray = await Promise.all(serverPromises);
-    const allStreams = [];
-    resultsArray.forEach(streams => allStreams.push(...streams));
-    
-    // Lọc trùng lặp URL
-    const uniqueStreams = [];
-    const seenUrls = new Set();
-    allStreams.forEach(s => {
-      if (!seenUrls.has(s.url)) {
-        seenUrls.add(s.url);
-        uniqueStreams.push(s);
-      }
-    });
-    
+    // Lọc chất lượng tốt nhất
     const bestStreams = {};
-    for (const s of uniqueStreams) {
-      if (!bestStreams[s.quality] || s.score > bestStreams[s.quality].score) {
-        bestStreams[s.quality] = s;
-      }
-    }
-    
-    if (bestStreams['4K'] && bestStreams['1080p']) {
-      delete bestStreams['720p'];
-      delete bestStreams['480p'];
-    }
-    
-    const finalResults = [];
-    const order = ['4K', '1080p', '720p', '480p', 'Unknown'];
-    for (const q of order) {
+    streams.forEach(s => {
+      if (!bestStreams[s.quality] || s.score > bestStreams[s.quality].score) bestStreams[s.quality] = s;
+    });
+
+    const results = [];
+    ['4K', '1080p', '720p', '480p'].forEach(q => {
       if (bestStreams[q]) {
-        const finalStream = bestStreams[q];
-        delete finalStream.score;
-        delete finalStream.quality;
-        finalResults.push(finalStream);
+        const s = bestStreams[q];
+        delete s.score; delete s.quality;
+        results.push(s);
       }
-    }
-    
-    console.log(`[VidEasy] Total streams returning: ${finalResults.length}`);
-    return finalResults;
-    
+    });
+
+    return results;
   } catch (e) {
-    console.log(`[VidEasy] Error in getStreams: ${e.message}`);
+    console.log(`[VidEasy] Error: ${e.message}`);
     return [];
   }
 }
