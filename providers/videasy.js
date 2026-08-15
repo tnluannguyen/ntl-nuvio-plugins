@@ -3,8 +3,6 @@ const { parseSizeToMB } = require('../utils/parser');
 const PROVIDER_NAME = 'VidEasy';
 const TMDB_API_KEY = 'ca1f881d0bd7bbf9cb3170edd54b52d5';
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
-
-// ĐÃ CẬP NHẬT: Tên miền mới từ ảnh của bạn
 const WINGS_API_BASE = 'https://api.speedracelight.com';
 
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
@@ -18,21 +16,6 @@ const REQUEST_HEADERS = {
   'Pragma': 'no-cache'
 };
 
-// ĐÃ CẬP NHẬT: Cấu trúc path mới /cdn/...
-const SERVERS = {
-  'Hydrogen': { path: 'cdn/sources-with-title' },
-  'Titanium': { path: 'cdn/sources-with-title' },
-  'Oxygen': { path: 'cdn/sources-with-title' },
-  'Lithium': { path: 'cdn/sources-with-title' },
-  'Krypton': { path: 'cdn/sources-with-title' },
-  'Carbon': { path: 'cdn/sources-with-title' },
-  'Aluminium': { path: 'cdn/sources-with-title' },
-  'Nitrogen': { path: 'cdn/sources-with-title' },
-  'Neon': { path: 'cdn/sources-with-title' },
-  'Helium': { path: 'cdn/sources-with-title' }
-};
-
-// --- THUẬT TOÁN GIẢI MÃ (GIỮ NGUYÊN VÌ THAM SỐ ENC=2 VẪN CÒN) ---
 const jl = [0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5, 0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174];
 const Tf = [0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476];
 const Js = 61;
@@ -118,7 +101,7 @@ function Cf(str, num, len) {
     const r = Rf(state, idx++);
     out[i++] = r & 255;
     if (i < len) out[i++] = (r >>> 8) & 255;
-    if (i < len) out[i++] = (r >>> 10) & 255;
+    if (i < len) out[i++] = (r >>> 16) & 255; // ĐÃ SỬA: 10 -> 16
     if (i < len) out[i++] = (r >>> 24) & 255;
   }
   return out;
@@ -185,7 +168,6 @@ async function getStreams(tmdbId, type = 'movie', season = null, episode = null)
     const mediaDetails = await fetchMediaDetails(tmdbId, type);
     if (!mediaDetails) return [];
 
-    // ĐÃ CẬP NHẬT: Lấy seed từ domain mới
     const seedUrl = `${WINGS_API_BASE}/seed?mediaId=${tmdbId}`;
     const seedRes = await fetch(seedUrl, { headers: REQUEST_HEADERS });
     if (!seedRes.ok) throw new Error(`Seed HTTP ${seedRes.status}`);
@@ -207,7 +189,6 @@ async function getStreams(tmdbId, type = 'movie', season = null, episode = null)
     const queryString = Object.keys(params).map(k => `${k}=${encodeURIComponent(params[k])}`).join('&');
     const url = `${WINGS_API_BASE}/cdn/sources-with-title?${queryString}`;
     
-    console.log(`[VidEasy] Fetching sources: ${url}`);
     const res = await fetch(url, { headers: REQUEST_HEADERS });
     const text = await res.text();
     
@@ -233,7 +214,6 @@ async function getStreams(tmdbId, type = 'movie', season = null, episode = null)
       });
     });
 
-    // Lọc chất lượng tốt nhất
     const bestStreams = {};
     streams.forEach(s => {
       if (!bestStreams[s.quality] || s.score > bestStreams[s.quality].score) bestStreams[s.quality] = s;
