@@ -14,6 +14,20 @@ const REQUEST_HEADERS = {
   'Pragma': 'no-cache'
 };
 
+// Hàm tính dung lượng nội bộ (Đã tích hợp để không cần gọi từ bên ngoài)
+function internalParseSize(sizeStr) {
+  if (!sizeStr) return 0;
+  const cleaned = String(sizeStr).replace(/,/g, '');
+  const match = cleaned.match(/([\d.]+)\s*(GB|MB|KB|G|M|K)/i);
+  if (!match) return 0;
+  const val = parseFloat(match[1]);
+  let unit = match[2].toUpperCase();
+  if (unit === 'G' || unit === 'GB') return val * 1024;
+  if (unit === 'M' || unit === 'MB') return val;
+  if (unit === 'K' || unit === 'KB') return val / 1024;
+  return 0;
+}
+
 const jl = [0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5, 0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174];
 const Js = 61;
 const _f = 8;
@@ -173,8 +187,8 @@ async function getStreams(tmdbId, type = 'movie', season = null, episode = null)
       if (!source.url) return;
       const quality = parseQuality(source.quality || '1080p');
       
-      // ĐÃ SỬA: Gọi trực tiếp parseSizeToMB được truyền từ Sandbox
-      const sizeMB = typeof parseSizeToMB === 'function' ? parseSizeToMB(source.size || '') : 0;
+      // Sử dụng hàm nội bộ đã khai báo ở trên
+      const sizeMB = internalParseSize(source.size || '');
       
       let score = sizeMB;
       if (source.quality?.includes('1080')) score += 1000000;
