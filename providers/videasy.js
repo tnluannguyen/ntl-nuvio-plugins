@@ -1,5 +1,3 @@
-const { parseSizeToMB } = require('../utils/parser');
-
 const PROVIDER_NAME = 'VidEasy';
 const TMDB_API_KEY = 'ca1f881d0bd7bbf9cb3170edd54b52d5';
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
@@ -20,7 +18,7 @@ const jl = [0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111
 const Js = 61;
 const _f = 8;
 const ms = 0x9e3779b9;
-const Ys = [109, 118, 109, 49]; // 'mvm1'
+const Ys = [109, 118, 109, 49]; 
 
 function ui(x) {
   x >>>= 0; x ^= x >>> 16;
@@ -75,7 +73,7 @@ function Cf(str, num, len) {
     const r = Rf(state, idx++);
     out[i++] = r & 255;
     if (i < len) out[i++] = (r >>> 8) & 255;
-    if (i < len) out[i++] = (r >>> 16) & 255; // ĐÃ SỬA: 16 chuẩn xác
+    if (i < len) out[i++] = (r >>> 16) & 255;
     if (i < len) out[i++] = (r >>> 24) & 255;
   }
   return out;
@@ -157,7 +155,7 @@ async function getStreams(tmdbId, type = 'movie', season = null, episode = null)
       imdbId: mediaDetails.imdbId || '',
       enc: '2',
       seed: seed,
-      t: Date.now() // ĐÃ SỬA: t thay vì _t
+      t: Date.now()
     };
 
     const queryString = Object.keys(params).map(k => `${k}=${encodeURIComponent(params[k])}`).join('&');
@@ -174,7 +172,10 @@ async function getStreams(tmdbId, type = 'movie', season = null, episode = null)
     parsedData.sources.forEach(source => {
       if (!source.url) return;
       const quality = parseQuality(source.quality || '1080p');
-      const sizeMB = parseSizeToMB(source.size || '');
+      
+      // ĐÃ SỬA: Gọi trực tiếp parseSizeToMB được truyền từ Sandbox
+      const sizeMB = typeof parseSizeToMB === 'function' ? parseSizeToMB(source.size || '') : 0;
+      
       let score = sizeMB;
       if (source.quality?.includes('1080')) score += 1000000;
 
