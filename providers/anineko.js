@@ -88,16 +88,28 @@ async function extractEpisodes(showUrl) {
 
 async function extractVibeplayer(videoUrl) {
   console.log(`[AniNeko] Extracting Vibeplayer: ${videoUrl}`);
-  const match = videoUrl.match(/https:\/\/([^\/]+)\/([a-z0-9]+)/i);
-  if (!match) {
-    console.log(`[AniNeko] Vibeplayer regex failed for: ${videoUrl}`);
+  try {
+    const html = await fetchText(videoUrl);
+    let subUrl = null;
+    const subMatch = html.match(/file\s*:\s*["']([^"']+\.vtt)["']/i);
+    if (subMatch) {
+      subUrl = subMatch[1];
+    }
+    
+    const match = videoUrl.match(/https:\/\/([^\/]+)\/([a-z0-9]+)/i);
+    if (!match) {
+      console.log(`[AniNeko] Vibeplayer regex failed for: ${videoUrl}`);
+      return null;
+    }
+    const domain = match[1];
+    const id = match[2];
+    const m3u8 = `https://${domain}/public/stream/${id}/master.m3u8`;
+    console.log(`[AniNeko] Vibeplayer extracted: ${m3u8}`);
+    return { streamUrl: m3u8, subUrl: subUrl };
+  } catch (err) {
+    console.log(`[AniNeko] Vibeplayer fetch error: ${err.message}`);
     return null;
   }
-  const domain = match[1];
-  const id = match[2];
-  const m3u8 = `https://${domain}/public/stream/${id}/master.m3u8`;
-  console.log(`[AniNeko] Vibeplayer extracted: ${m3u8}`);
-  return m3u8;
 }
 
 async function extractPacker(videoUrl) {
@@ -112,9 +124,16 @@ async function extractPacker(videoUrl) {
 
     const unpacked = unpack(scriptMatch[1]);
     const hlsMatch = unpacked.match(/(https:\/\/[^"']+(?:master|index)\.m3u8[^"']*)/);
+    
+    let subUrl = null;
+    const subMatch = unpacked.match(/file\s*:\s*["']([^"']+\.vtt)["']/i);
+    if (subMatch) {
+      subUrl = subMatch[1];
+    }
+
     if (hlsMatch) {
       console.log(`[AniNeko] Packer extracted: ${hlsMatch[1]}`);
-      return hlsMatch[1];
+      return { streamUrl: hlsMatch[1], subUrl: subUrl };
     }
 
     console.log("[AniNeko] Packer m3u8 regex failed on unpacked code.");
@@ -209,16 +228,17 @@ async function extractStreamsFromEpisode(episodeUrl) {
       continue;
     }
 
-    const task = extractorPromise.then(async (streamUrl) => {
-      if (!streamUrl) {
+    const task = extractorPromise.then(async (extractedData) => {
+      if (!extractedData || !extractedData.streamUrl) {
         console.log(`[AniNeko] Extractor returned null for ${serverName}`);
         return null;
       }
-      const bestUrl = await resolveHighestQuality(streamUrl, embedReferer);
+      const bestUrl = await resolveHighestQuality(extractedData.streamUrl, embedReferer);
       return { 
         serverName: serverName, 
         priority: priority, 
         streamUrl: bestUrl,
+        subUrl: extractedData.subUrl,
         referer: embedReferer,
         origin: embedOrigin
       };
@@ -239,6 +259,7 @@ async function extractStreamsFromEpisode(episodeUrl) {
   const streams = valid.map(s => ({ 
     serverName: s.serverName, 
     streamUrl: s.streamUrl,
+    subUrl: s.subUrl,
     referer: s.referer,
     origin: s.origin
   }));
@@ -358,6 +379,7 @@ async function getStreams(tmdbId, mediaType, season, episode, payload) {
       name: `${PROVIDER_NAME} [${s.serverName}]`,
       title: "1080p",
       url: s.streamUrl,
+      subUrl: s.subUrl,
       headers: {
         "User-Agent": DEFAULT_HEADERS["User-Agent"],
         "Referer": s.referer,
