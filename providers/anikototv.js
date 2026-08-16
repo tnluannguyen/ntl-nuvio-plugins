@@ -228,10 +228,19 @@ async function extractHLS(url, domain) {
         console.log(`[${PROVIDER_NAME}] Error parsing m3u8 for quality: ${e.message}`);
       }
       
+      let subUrl = null;
+      if (sourceData.tracks && Array.isArray(sourceData.tracks)) {
+        const engTrack = sourceData.tracks.find(t => t.label && t.label.toLowerCase().includes('english'));
+        if (engTrack && engTrack.file) {
+          subUrl = engTrack.file;
+        }
+      }
+
       console.log(`[${PROVIDER_NAME}] Successfully extracted m3u8: ${sourceData.sources.file}`);
       return {
         url: sourceData.sources.file,
         quality: quality,
+        subUrl: subUrl,
         headers: { 'Referer': `https://${domain}/`, 'Origin': `https://${domain}` }
       };
     }
@@ -378,6 +387,7 @@ async function getStreams(id, type, season, ep) {
             quality: hlsData.quality || '1080p',
             title: '1080p',
             url: hlsData.url,
+            subUrl: hlsData.subUrl,
             headers: hlsData.headers
           });
         }
